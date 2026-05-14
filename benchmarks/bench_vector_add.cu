@@ -88,13 +88,21 @@ int main() {
     }
 
     // Effective bandwidth
-    // read a + read b + write c = 3 * n * sizeof(float);
-    double transferred_bytes = 3.0 * bytes;
-    double bandwidth_GB_s = transferred_bytes / (avg_kernel_ms / 1000.0) / 1e9;
+    // GPU: read a + read b + write c = 3 * n * sizeof(float);
+    double gpu_bytes = 3.0 * bytes;
+    double gpu_bandwidth_GB_s = gpu_bytes / (avg_kernel_ms / 1000.0) / 1e9;
+
+    // CPU: assume that arrays are large enough that they can not be put into the last-level cache
+    // thus the DRAM bandwidth is measured (roughly): read a + read b + write c = 3 * n * sizeof(float);
+    double cpu_bytes = 3.0 * bytes;
+    double cpu_bandwidth_GB_s = cpu_bytes / (avg_cpu_ms / 1000.0) / 1e9;
+
 
     fmt::print("Average cpu time: {} ms\n", avg_cpu_ms);
     fmt::print("Average kernel time: {} ms\n", avg_kernel_ms);
-    fmt::print("Effevtive bandwidth = {} GB/s\n", bandwidth_GB_s);
+    fmt::print("Effevtive CPU bandwidth = {} GB/s\n", cpu_bandwidth_GB_s);
+    fmt::print("Effevtive GPU bandwidth = {} GB/s\n", gpu_bandwidth_GB_s);
+
 
     gpu::cuda_check(cudaFree(a_dev));
     gpu::cuda_check(cudaFree(b_dev));
