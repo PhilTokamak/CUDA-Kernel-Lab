@@ -21,15 +21,9 @@ Goal: build the full CUDA kernel development workflow
 - [ ] Add generic CPU benchmark helper
 - [ ] Add generic CUDA benchmark helper
 
-
-
 ## Possible Improvements for Vector Add
 
 - [ ] Add OpenMP CPU baseline
-
-
-
-
 
 ## Next Kernels
 

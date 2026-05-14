@@ -14,8 +14,6 @@ A modern CUDA/C++ playground for experimenting with GPU kernels and learning GPU
 - Error handling with `std::source_location`
 - `fmtlib`-based diagnostics
 
-
-
 ## Goals
 
 This project is intended as a learning and experimentation infrastructure for:
