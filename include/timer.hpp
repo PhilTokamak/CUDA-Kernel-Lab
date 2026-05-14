@@ -1,6 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
 #include "cuda_utils.cuh"
+#include <chrono>
 
 class CudaTimer {
 public:
@@ -27,6 +28,26 @@ public:
     }
 
 private:
-    cudaEvent_t _start{},
+    cudaEvent_t _start{};
     cudaEvent_t _stop{};
+};
+
+class CpuTimer {
+public:
+    using clock = std::chrono::steady_clock;
+    CpuTimer() = default;
+
+    void start() {
+        _start = std::chrono::steady_clock::now();
+    }
+
+    double stop() {
+        _end = clock::now();
+        std::chrono::duration<double, std::milli> ms = _end - _start;
+        return ms.count();
+    }
+
+private:
+    clock::time_point _start;
+    clock::time_point _end;
 };

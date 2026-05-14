@@ -3,7 +3,9 @@
 #include <cmath>
 #include <source_location>
 #include <stdexcept>
+#include <memory>
 #include <fmt/core.h>
+#include <fmt/format.h>
 
 namespace gpu{
 
@@ -48,4 +50,30 @@ inline bool check_result(const float* a, const float* b, int num_elem, float tol
         }
     }
     return true;
+}
+
+struct CudaHostDeleter
+{
+    void operator()(float* ptr) const
+    {
+        if(ptr)
+        {
+            cudaFreeHost(ptr);
+        }
+    }
+};
+
+using host_ptr = std::unique_ptr<float[], CudaHostDeleter>;
+
+template<typename T>
+T* cuda_malloc_host(int n)
+{
+    T* ptr = nullptr;
+
+    gpu::cuda_check(cudaMallocHost(
+        reinterpret_cast<void**>(&ptr),
+        n * sizeof(T)
+    ));
+
+    return ptr;
 }

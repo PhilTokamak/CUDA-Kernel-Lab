@@ -3,10 +3,12 @@ project(cuda_kernel_lab LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(CMAKE_CUDA_ARCHITECTURES 80)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(fmt REQUIRED)
 
@@ -23,6 +25,12 @@ target_include_directories(
     cuda_kernels
     PUBLIC
     include)
+
+target_link_libraries(
+    cuda_kernels
+    PUBLIC
+    fmt::fmt
+)
 
 # =====================================
 # Benchmark executable
