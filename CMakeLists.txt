@@ -1,15 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
-project(cuda_kernel_lab LANGUAGES CXX CUDA)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_STANDARD 20)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+project(cuda_kernel_lab
+        LANGUAGES CXX CUDA
+)
 
-set(CMAKE_CUDA_ARCHITECTURES 80)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
+# =====================================
+# Find Packages
+# =====================================
 find_package(fmt REQUIRED)
 
 # =====================================
@@ -25,6 +22,13 @@ target_include_directories(
     cuda_kernels
     PUBLIC
     include)
+
+target_compile_features(
+    cuda_kernels
+    PUBLIC
+    cxx_std_20
+    cuda_std_20
+)
 
 target_link_libraries(
     cuda_kernels
@@ -45,5 +49,12 @@ target_link_libraries(
     bench_vector_add
     PRIVATE
     cuda_kernels
+)
+
+set_target_properties(
+    bench_vector_add
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+    ${CMAKE_BINARY_DIR}/bin
 )
 
