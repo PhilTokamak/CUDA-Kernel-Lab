@@ -58,3 +58,10 @@ set_target_properties(
     ${CMAKE_BINARY_DIR}/bin
 )
 
+enable_testing()
+
+add_test(
+    NAME vector_add_test
+    COMMAND bench_vector_add
+)
+
