@@ -50,9 +50,11 @@ int main() {
     gpu::cuda_check(cudaMalloc(&b_dev, bytes));
     gpu::cuda_check(cudaMalloc(&result_dev, bytes));
 
+    cpu_timer.start();
     // Copy data to the GPU
     gpu::cuda_check(cudaMemcpy(a_dev, a_host.get(), bytes, cudaMemcpyDefault));
     gpu::cuda_check(cudaMemcpy(b_dev, b_host.get(), bytes, cudaMemcpyDefault));
+    float h2d_ms = cpu_timer.stop();
 
     int repeat_cpu = 3;
     cpu_timer.start();
@@ -75,8 +77,10 @@ int main() {
     // Wait kernel to finish execution
     gpu::cuda_check(cudaDeviceSynchronize());
 
+    cpu_timer.start();
     // Copy kernel results back to host
     gpu::cuda_check(cudaMemcpy(result_from_dev.get(), result_dev, bytes, cudaMemcpyDefault));
+    float d2h_ms = cpu_timer.stop();
 
     if(check_result(result_host.get(), result_from_dev.get(), n))
     {
@@ -97,11 +101,29 @@ int main() {
     double cpu_bytes = 3.0 * bytes;
     double cpu_bandwidth_GB_s = cpu_bytes / (avg_cpu_ms / 1000.0) / 1e9;
 
+    // H2D bandwidth
+    double h2d_bytes = 2.0 * bytes;
+    double h2d_bandwidth_GB_s = h2d_bytes / (h2d_ms / 1000.0) / 1e9;
 
-    fmt::print("Average cpu time: {} ms\n", avg_cpu_ms);
-    fmt::print("Average kernel time: {} ms\n", avg_kernel_ms);
+    // D2H bandwidth
+    double d2h_bytes = 1.0 * bytes;
+    double d2h_bandwidth_GB_s = d2h_bytes / (d2h_ms / 1000.0) / 1e9;
+
+    // End-to-end effective bandwidth
+    double e2e_bytes = 3.0 * bytes; // H2D two arrays + D2H one array
+    double e2e_ms = h2d_ms + avg_kernel_ms + d2h_ms;
+    double e2e_bandwidth_GB_s = e2e_bytes / (e2e_ms / 1000.0) / 1e9;
+
+    fmt::print("Average cpu serial time: {} ms\n", avg_cpu_ms);
+    fmt::print("H2D copy time: {} ms\n", h2d_ms);
+    fmt::print("Average kernel-only time: {} ms\n", avg_kernel_ms);
+    fmt::print("D2H copy time: {} ms\n", d2h_ms);
+    fmt::print("GPU End-to-end time: {} ms\n", e2e_ms);
     fmt::print("Effevtive CPU bandwidth = {} GB/s\n", cpu_bandwidth_GB_s);
     fmt::print("Effevtive GPU bandwidth = {} GB/s\n", gpu_bandwidth_GB_s);
+    fmt::print("H2D bandwidth: {} GB/s\n", h2d_bandwidth_GB_s);
+    fmt::print("D2H bandwidth: {} GB/s\n", d2h_bandwidth_GB_s);
+    fmt::print("GPU End-to-end effective bandwidth: {} GB/s\n", e2e_bandwidth_GB_s);
 
 
     gpu::cuda_check(cudaFree(a_dev));
