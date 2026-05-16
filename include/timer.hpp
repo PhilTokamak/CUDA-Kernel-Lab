@@ -19,6 +19,7 @@ public:
         gpu::cuda_check(cudaEventRecord(_start));
     }
 
+    [[nodiscard]]
     float stop() {
         gpu::cuda_check(cudaEventRecord(_stop));
         gpu::cuda_check(cudaEventSynchronize(_stop));
@@ -41,6 +42,7 @@ public:
         _start = std::chrono::steady_clock::now();
     }
 
+    [[nodiscard]]
     double stop() {
         _end = clock::now();
         std::chrono::duration<double, std::milli> ms = _end - _start;
