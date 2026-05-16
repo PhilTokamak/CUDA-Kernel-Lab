@@ -80,12 +80,12 @@ TimeStats benchmark_cuda_kernel(Func&& launch_func, int repeat, CudaTimer& cuda_
     return compute_time_stats(samples);
 }
 
-inline double bandwidt_GB_s(size_t bytes, double ms)
+inline double bandwidth_GB_s(size_t bytes, double ms)
 {
     return static_cast<double>(bytes) / (ms / 1000.0 * 1e9);
 }
 
-inline double gflops(size_t n_flop, double ms)
+inline double calculate_gflops(size_t n_flop, double ms)
 {
     return static_cast<double>(n_flop) / (ms / 1000.0 * 1e9);
 }
