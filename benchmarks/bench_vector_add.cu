@@ -1,11 +1,11 @@
 #include "vector_add.hpp"
 #include "cuda_utils.cuh"
-#include "timer.hpp"
+#include "bench_utils.hpp"
 
 #include <random>
 #include <cuda/cmath>
 
-void init_array(float* a, int num_elem)
+void init_array(float* a, size_t num_elem)
 {
     // Random number engine
     std::random_device rd;
@@ -13,16 +13,17 @@ void init_array(float* a, int num_elem)
 
     std::uniform_real_distribution<float> dis(0.0f, 1.0f);
 
-    for(int i = 0; i < num_elem; ++i)
+    for(size_t i = 0; i < num_elem; ++i)
     {
         a[i] = dis(gen);
     }
 }
 
-int main() {
-    int n = 1 << 26;
+int main()
+{
+    size_t n = 1 << 26;
 
-    int bytes = n * sizeof(float);
+    size_t bytes = n * sizeof(float);
 
     fmt::print("Vector length n = {}\nArray size = {} MiB per vector\n", n, bytes/static_cast<double>(1ULL << 20));
 
@@ -56,13 +57,12 @@ int main() {
     gpu::cuda_check(cudaMemcpy(b_dev, b_host.get(), bytes, cudaMemcpyDefault));
     float h2d_ms = cpu_timer.stop();
 
+    // Run CPU benchmark
     int repeat_cpu = 3;
-    cpu_timer.start();
-    for (int i = 0; i < repeat_cpu; ++i)
-    {
+    auto time_stats_cpu = benchmark_cpu([&]() {
         vector_add_cpu(a_host.get(), b_host.get(), result_host.get(), n);
-    }
-    float avg_cpu_ms = cpu_timer.stop() / repeat_cpu;
+    },
+    repeat_cpu, cpu_timer);
 
     int repeat_gpu = 10;
     cuda_timer.start();
@@ -93,28 +93,28 @@ int main() {
 
     // Effective bandwidth
     // GPU: read a + read b + write c = 3 * n * sizeof(float);
-    double gpu_bytes = 3.0 * bytes;
-    double gpu_bandwidth_GB_s = gpu_bytes / (avg_kernel_ms / 1000.0) / 1e9;
+    double gpu_bytes = 3.0 * static_cast<double>(bytes);
+    double gpu_bandwidth_GB_s = bandwidt_GB_s(gpu_bytes, avg_kernel_ms);
 
     // CPU: assume that arrays are large enough that they can not be put into the last-level cache
     // thus the DRAM bandwidth is measured (roughly): read a + read b + write c = 3 * n * sizeof(float);
-    double cpu_bytes = 3.0 * bytes;
-    double cpu_bandwidth_GB_s = cpu_bytes / (avg_cpu_ms / 1000.0) / 1e9;
+    double cpu_bytes = 3.0 * static_cast<double>(bytes);
+    double cpu_bandwidth_GB_s = bandwidt_GB_s(cpu_bytes, time_stats_cpu.avg_ms);
 
     // H2D bandwidth
-    double h2d_bytes = 2.0 * bytes;
-    double h2d_bandwidth_GB_s = h2d_bytes / (h2d_ms / 1000.0) / 1e9;
+    double h2d_bytes = 2.0 * static_cast<double>(bytes);
+    double h2d_bandwidth_GB_s = bandwidt_GB_s(h2d_bytes, h2d_ms);
 
     // D2H bandwidth
-    double d2h_bytes = 1.0 * bytes;
-    double d2h_bandwidth_GB_s = d2h_bytes / (d2h_ms / 1000.0) / 1e9;
+    double d2h_bytes = 1.0 * static_cast<double>(bytes);
+    double d2h_bandwidth_GB_s = bandwidt_GB_s(d2h_bytes, d2h_ms);
 
     // End-to-end effective bandwidth
-    double e2e_bytes = 3.0 * bytes; // H2D two arrays + D2H one array
+    double e2e_bytes = 3.0 * static_cast<double>(bytes); // H2D two arrays + D2H one array
     double e2e_ms = h2d_ms + avg_kernel_ms + d2h_ms;
-    double e2e_bandwidth_GB_s = e2e_bytes / (e2e_ms / 1000.0) / 1e9;
+    double e2e_bandwidth_GB_s = bandwidt_GB_s(e2e_bytes, e2e_ms);
 
-    fmt::print("Average cpu serial time: {} ms\n", avg_cpu_ms);
+    fmt::print("Average cpu serial time: {} ms\n", time_stats_cpu.avg_ms);
     fmt::print("H2D copy time: {} ms\n", h2d_ms);
     fmt::print("Average kernel-only time: {} ms\n", avg_kernel_ms);
     fmt::print("D2H copy time: {} ms\n", d2h_ms);

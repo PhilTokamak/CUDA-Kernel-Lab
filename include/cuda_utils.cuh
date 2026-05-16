@@ -38,12 +38,12 @@ inline void cuda_check_last(
 } // namespace gpu
 
 
-inline bool check_result(const float* a, const float* b, int num_elem, float tol = 1e-5f)
+inline bool check_result(const float* a, const float* b, size_t num_elem, float tol = 1e-5f)
 {
-    for(int i = 0; i < num_elem; ++i)
+    for(size_t i = 0; i < num_elem; ++i)
     {
         float diff = std::abs(a[i] - b[i]);
-        if(abs(a[i] - b[i]) > tol)
+        if(diff > tol)
         {
             fmt::print("Mismatch at index {}, {} /= {}.\n", i, a[i], b[i]);
             return false;
@@ -66,7 +66,7 @@ struct CudaHostDeleter
 using host_ptr = std::unique_ptr<float[], CudaHostDeleter>;
 
 template<typename T>
-T* cuda_malloc_host(int n)
+T* cuda_malloc_host(size_t n)
 {
     T* ptr = nullptr;
 
