@@ -19,12 +19,11 @@ __global__ void vector_add_kernel(const float* a, const float* b, float* c, size
     }
 }
 
-void launch_vector_add(const float* a_dev, const float* b_dev, float* c_dev, size_t num_elem)
+void launch_vector_add(const float* a_dev, const float* b_dev, float* c_dev, size_t num_elem, int block_size)
 {
-    constexpr int threads = 256;
-    int blocks = static_cast<int>(cuda::ceil_div(num_elem, static_cast<size_t>(threads)));
+    int blocks = static_cast<int>(cuda::ceil_div(num_elem, static_cast<size_t>(block_size)));
 
-    vector_add_kernel<<<blocks, threads>>>(a_dev, b_dev, c_dev, num_elem);
+    vector_add_kernel<<<blocks, block_size>>>(a_dev, b_dev, c_dev, num_elem);
 
     gpu::cuda_check_last();
 }
