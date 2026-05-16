@@ -42,7 +42,7 @@ inline TimeStats compute_time_stats(const std::vector<double>& samples)
 
 template <typename Func>
 [[nodiscard]]
-TimeStats benchmark_cpu(Func&& func, int repeat, CpuTimer cpu_timer)
+TimeStats benchmark_cpu(Func&& func, int repeat, CpuTimer& cpu_timer)
 {
     std::vector<double> samples;
     samples.reserve(repeat);
@@ -62,7 +62,7 @@ TimeStats benchmark_cpu(Func&& func, int repeat, CpuTimer cpu_timer)
 
 template <typename Func>
 [[nodiscard]]
-TimeStats benchmark_cuda_kernel(Func&& launch_func, int repeat, CudaTimer cuda_timer)
+TimeStats benchmark_cuda_kernel(Func&& launch_func, int repeat, CudaTimer& cuda_timer)
 {
     std::vector<double> samples;
     samples.reserve(repeat);
@@ -83,4 +83,9 @@ TimeStats benchmark_cuda_kernel(Func&& launch_func, int repeat, CudaTimer cuda_t
 inline double bandwidt_GB_s(size_t bytes, double ms)
 {
     return static_cast<double>(bytes) / (ms / 1000.0 * 1e9);
+}
+
+inline double gflops(size_t n_flop, double ms)
+{
+    return static_cast<double>(n_flop) / (ms / 1000.0 * 1e9);
 }
