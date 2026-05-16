@@ -93,11 +93,13 @@ int main()
     // GPU: read a + read b + write c = 3 * n * sizeof(float);
     double gpu_bytes = 3.0 * static_cast<double>(bytes);
     double gpu_bandwidth_GB_s = bandwidt_GB_s(gpu_bytes, time_stats_kernel.avg_ms);
+    double gpu_gflops = gflops(n, time_stats_kernel.avg_ms);
 
     // CPU: assume that arrays are large enough that they can not be put into the last-level cache
     // thus the DRAM bandwidth is measured (roughly): read a + read b + write c = 3 * n * sizeof(float);
     double cpu_bytes = 3.0 * static_cast<double>(bytes);
     double cpu_bandwidth_GB_s = bandwidt_GB_s(cpu_bytes, time_stats_cpu.avg_ms);
+    double cpu_gflops = gflops(n, time_stats_cpu.avg_ms);
 
     // H2D bandwidth
     double h2d_bytes = 2.0 * static_cast<double>(bytes);
@@ -122,6 +124,8 @@ int main()
     fmt::print("H2D bandwidth: {} GB/s\n", h2d_bandwidth_GB_s);
     fmt::print("D2H bandwidth: {} GB/s\n", d2h_bandwidth_GB_s);
     fmt::print("GPU End-to-end effective bandwidth: {} GB/s\n", e2e_bandwidth_GB_s);
+    fmt::print("CPU GFlop/s: {}\n", cpu_gflops);
+    fmt::print("GPU GFlop/s: {}\n", gpu_gflops);
 
 
     gpu::cuda_check(cudaFree(a_dev));
