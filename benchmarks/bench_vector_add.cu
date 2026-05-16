@@ -64,15 +64,13 @@ int main()
     },
     repeat_cpu, cpu_timer);
 
+    // Run GPU benchmark
     int repeat_gpu = 10;
-    cuda_timer.start();
-    // Launch the kernel
-    for (int i = 0; i < repeat_gpu; ++i)
-    {
+    auto time_stats_kernel = benchmark_cuda_kernel([&]() {
+        // Launch the kernel
         launch_vector_add(a_dev, b_dev, result_dev, n);
-    }
-
-    float avg_kernel_ms = cuda_timer.stop() / repeat_gpu;
+    },
+    repeat_gpu, cuda_timer);
 
     // Wait kernel to finish execution
     gpu::cuda_check(cudaDeviceSynchronize());
@@ -94,7 +92,7 @@ int main()
     // Effective bandwidth
     // GPU: read a + read b + write c = 3 * n * sizeof(float);
     double gpu_bytes = 3.0 * static_cast<double>(bytes);
-    double gpu_bandwidth_GB_s = bandwidt_GB_s(gpu_bytes, avg_kernel_ms);
+    double gpu_bandwidth_GB_s = bandwidt_GB_s(gpu_bytes, time_stats_kernel.avg_ms);
 
     // CPU: assume that arrays are large enough that they can not be put into the last-level cache
     // thus the DRAM bandwidth is measured (roughly): read a + read b + write c = 3 * n * sizeof(float);
@@ -111,12 +109,12 @@ int main()
 
     // End-to-end effective bandwidth
     double e2e_bytes = 3.0 * static_cast<double>(bytes); // H2D two arrays + D2H one array
-    double e2e_ms = h2d_ms + avg_kernel_ms + d2h_ms;
+    double e2e_ms = h2d_ms + time_stats_kernel.avg_ms + d2h_ms;
     double e2e_bandwidth_GB_s = bandwidt_GB_s(e2e_bytes, e2e_ms);
 
     fmt::print("Average cpu serial time: {} ms\n", time_stats_cpu.avg_ms);
     fmt::print("H2D copy time: {} ms\n", h2d_ms);
-    fmt::print("Average kernel-only time: {} ms\n", avg_kernel_ms);
+    fmt::print("Average kernel-only time: {} ms\n", time_stats_kernel.avg_ms);
     fmt::print("D2H copy time: {} ms\n", d2h_ms);
     fmt::print("GPU End-to-end time: {} ms\n", e2e_ms);
     fmt::print("Effevtive CPU bandwidth = {} GB/s\n", cpu_bandwidth_GB_s);
