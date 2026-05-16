@@ -11,7 +11,7 @@ Goal: build the full CUDA kernel development workflow
 - [x] Add `CpuTimer`
 - [x] Benchmark CPU version
 - [x] Benchmark GPU version
-- [ ] Compute CPU effective bandwidth
+- [x] Compute CPU effective bandwidth
 - [x] Compute GPU effective bandwidth
 - [ ] Test different vector sizes
 - [ ] Test different block sizes
@@ -24,6 +24,8 @@ Goal: build the full CUDA kernel development workflow
 ## Possible Improvements for Vector Add
 
 - [ ] Add OpenMP CPU baseline
+
+## Backlog
 
 ## Next Kernels
 
