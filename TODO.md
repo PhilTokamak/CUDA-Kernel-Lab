@@ -13,13 +13,13 @@ Goal: build the full CUDA kernel development workflow
 - [x] Benchmark GPU version
 - [x] Compute CPU effective bandwidth
 - [x] Compute GPU effective bandwidth
-- [ ] Test different vector sizes
-- [ ] Test different block sizes
+- [x] Test different vector sizes
+- [x] Test different block sizes
 
 ## Refactoring Ideas
 
-- [ ] Add generic CPU benchmark helper
-- [ ] Add generic CUDA benchmark helper
+- [x] Add generic CPU benchmark helper
+- [x] Add generic CUDA benchmark helper
 
 ## Possible Improvements for Vector Add
 
