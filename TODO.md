@@ -15,6 +15,7 @@ Goal: build the full CUDA kernel development workflow
 - [x] Compute GPU effective bandwidth
 - [x] Test different vector sizes
 - [x] Test different block sizes
+- [ ] Compare pageable host memory and pinned host memory for H2D/D2H transfer
 
 ## Refactoring Ideas
 
