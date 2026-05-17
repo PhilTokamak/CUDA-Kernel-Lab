@@ -199,7 +199,7 @@ def main():
         f.write("\n\n")
 
         # Problem size sweep (Use CPU and best GPU per N)
-        f.write("## CUDA Block Size Sweep\n\n")
+        f.write("## Problem Size Sweep\n\n")
         f.write("Version = cuda_naive\n\n")
 
         sweep_n_rows = []
