@@ -138,9 +138,9 @@ int main()
     std::vector<int> block_sizes{64, 128, 256, 512, 1024};
 
     // Number of measurement repetitions
-    int repeat_cpu  = 5;
-    int repeat_gpu  = 50;
-    int repeat_copy = 5;
+    int repeat_cpu  = 10;
+    int repeat_gpu  = 100;
+    int repeat_copy = 10;
 
     // Sweep over vector lengths
     for (size_t n : sizes_vec)
