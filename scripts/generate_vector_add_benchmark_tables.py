@@ -235,7 +235,7 @@ def main():
             kernel_speedup = cpu_time_n / gpu_time_n
 
             sweep_n_rows.append({
-                "N" : n,
+                "N" : f"{n:,}",
                 "Single Vector Size [MiB]" : single_vector_size_MiB,
                 "CPU Time [ms]" : cpu_time_n,
                 "CPU BW [GB/s]" : cpu_row["bw_GB_s"],
