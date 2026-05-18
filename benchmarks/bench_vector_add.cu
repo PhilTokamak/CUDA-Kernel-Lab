@@ -60,7 +60,7 @@ void write_csv_header(std::ofstream& out)
     std::vector<std::string> headers
     {
         "kernel",    // kernel name, e.g. `vector_add`
-        "version",   // implementation version, e.g. `cpu_serial`, `cuda_naive`, `pageable memcpy`
+        "version",   // implementation version, e.g. `cpu_serial`, `cuda_naive`, `pinned memcpy`
         "mode",      // measure mode, e.g. `cpu`, `cuda_kernel`, `h2d`, `d2h`
         "dtype",     // data type, e.g. fp32
         "n",         // vector length
@@ -201,7 +201,7 @@ int main()
         // Write H2D benchmark results
         write_csv_row(out,
             "vector_add",
-            "pageable_memcpy",
+            "pinned_memcpy",
             "h2d",
             "fp32",
             n,
@@ -255,7 +255,7 @@ int main()
         // Write D2H benchmark results
         write_csv_row(out,
             "vector_add",
-            "pageable_memcpy",
+            "pinned_memcpy",
             "d2h",
             "fp32",
             n,

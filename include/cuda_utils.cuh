@@ -70,6 +70,8 @@ T* cuda_malloc_host(size_t n)
 {
     T* ptr = nullptr;
 
+    // cudaMallocHost is a CUDA runtime function used to
+    // allocate pinned (or page-locked) memory on the CPU
     gpu::cuda_check(cudaMallocHost(
         reinterpret_cast<void**>(&ptr),
         n * sizeof(T)
