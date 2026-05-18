@@ -2,8 +2,10 @@
 
 A modern CUDA/C++ playground for experimenting with GPU kernels and learning GPU performance engineering.
 
-## Kernels
+## Current Kernels
+
 - Vector Add
+- Reduction
 
 ## Features
 
