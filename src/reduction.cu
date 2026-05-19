@@ -62,10 +62,10 @@ __global__ void reduce_block_kernel(const float* input, float* partial_sum_out, 
     }
 
     local_array[tid] = val;
-    // Synchronize all threads in one grid
+    // Synchronize all threads in the block
     __syncthreads();
 
-    for(unsigned int stride = blockDim.x; stride > 0; stride >>= 1)
+    for(unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1)
     {
         if(tid < stride)
         {
