@@ -1,22 +1,22 @@
 # TODO list
 
-## Current Focus: Reduction 
+## Current Focus: Reduction
 
 Goal: implement and benchmark several CUDA reduction strategies
 
-- [ ] Implement CPU serial reduction
-- [ ] Implement CUDA atomic reduction
-- [ ] Implement CUDA block-level shared memory
+- [x] Implement CPU serial reduction
+- [x] Implement CUDA atomic reduction
+- [x] Implement CUDA block-level shared memory
 - [ ] Add correctness check with absolute and relative error
 - [ ] Add benchmark sweep over `n`
 - [ ] Add benchmark sweep over block size
 - [ ] Output benchmark data to `results/data/reduction`
-- [ ] Generate Markdown tables 
-- [ ] Write `results/reduction.md` 
+- [ ] Generate Markdown tables
+- [ ] Write `results/reduction.md`
 
 ## Possible Improvements
 
-- [ ] 
+- [ ]
 
 ## Backlog
 
