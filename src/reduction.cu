@@ -65,6 +65,7 @@ __global__ void reduce_block_kernel(const float* input, float* partial_sum_out, 
     // Synchronize all threads in the block
     __syncthreads();
 
+    // block reduction
     for(unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1)
     {
         if(tid < stride)
@@ -82,7 +83,7 @@ __global__ void reduce_block_kernel(const float* input, float* partial_sum_out, 
 }
 
 /**
- * @brief Launch atomic-add reduction kernel
+ * @brief Launch block_share memory reduction kernel
  *
  * @param[in] x_dev            Input array to reduce
  * @param[out] partial_sum_dev  Partial sums from GPU kernel
@@ -95,6 +96,63 @@ void launch_reduce_block(const float* x_dev, float* partial_sum_dev, size_t n, i
     size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
 
     reduce_block_kernel<<<blocks, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
+
+    gpu::cuda_check_last();
+}
+
+/**
+ * Grid-stride loop version
+ */
+__global__ void reduce_grid_stride_kernel(const float* input, float* partial_sum_out, size_t n)
+{
+    extern __shared__ float local_array[];
+
+    unsigned int tid = threadIdx.x;
+
+    unsigned int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    float val{};
+    unsigned int grid_stride = gridDim.x * blockDim.x;
+
+    // Grid-stride loop
+    for(size_t i = idx; i < n; i += grid_stride) {
+        val += input[i];
+    }
+
+    // Put partial sum of each thread into local array and synchronize block threads
+    local_array[tid] = val;
+    // Synchronize all threads in the block
+    __syncthreads();
+
+    // block reduction
+    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>=1)
+    {
+        if(tid < stride)
+        {
+            local_array[tid] += local_array[tid + stride];
+        }
+        __syncthreads();
+    }
+    if(tid == 0)
+    {
+        partial_sum_out[blockIdx.x] = local_array[0];
+    }
+}
+
+/**
+ * @brief Launch grid-stride loop gridh-shared memory reduction kernel
+ *
+ * @param[in] x_dev            Input array to reduce
+ * @param[out] partial_sum_dev  Partial sums from GPU kernel
+ * @param[in] n                Length of input array
+ */
+void launch_reduce_grid_stride(const float* x_dev, float* partial_sum_dev, size_t n, int block_size, int grid_size)
+{
+    // int blocks = cuda::ceil_div(n, block_size);
+    // Calculate shared bytes for specifying the size of block-shared memory
+    size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
+
+    reduce_grid_stride_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
 
     gpu::cuda_check_last();
 }
