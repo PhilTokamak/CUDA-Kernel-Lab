@@ -89,3 +89,9 @@ inline double calculate_gflops(size_t n_flop, double ms)
 {
     return static_cast<double>(n_flop) / (ms / 1000.0 * 1e9);
 }
+
+template<typename T>
+inline size_t bytes_per_vector(size_t num_elem)
+{
+    return num_elem * sizeof(T);
+}

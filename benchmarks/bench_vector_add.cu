@@ -25,12 +25,6 @@ void init_array(float* a, size_t num_elem)
     }
 }
 
-template<typename T>
-inline size_t bytes_per_vector(size_t num_elem)
-{
-    return num_elem * sizeof(T);
-}
-
 inline size_t bytes_vector_add(size_t num_elem)
 {
     // read a + read b + write c
