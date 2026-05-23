@@ -4,9 +4,9 @@ Environment: see [`environment.md`](environment.md)
 
 ## Generated Tables
 
-Generated tabls can be found in [`vector_add_bench_tables.md`](markdown_tables/vector_add_bench_tables.md)
+Generated tabls can be found in [`vector_add_bench_tables.md`](markdown_tables/vector_add_bench_tables_ref.md)
 
-For CPU cache test, the tables can be found in [`vector_add_bench_tables_cpu_cache.md`](markdown_tables/vector_add_bench_tables_cpu_cache.md)
+For CPU cache test, the tables can be found in [`vector_add_bench_tables_cpu_cache.md`](markdown_tables/vector_add_bench_tables_cpu_cache_ref.md)
 
 ## Observations
 
