@@ -16,6 +16,7 @@ find_package(fmt REQUIRED)
 add_library(
     cuda_kernels
     src/vector_add.cu
+    src/reduction.cu
 )
 
 target_include_directories(
@@ -37,9 +38,10 @@ target_link_libraries(
 )
 
 # =====================================
-# Benchmark executable
+# Benchmark executables
 # =====================================
 
+# Vector Add
 add_executable(
     bench_vector_add
     benchmarks/bench_vector_add.cu
@@ -58,10 +60,40 @@ set_target_properties(
     ${CMAKE_BINARY_DIR}/bin
 )
 
+# Reduction
+add_executable(
+    bench_reduction
+    benchmarks/bench_reduction.cu
+)
+
+target_link_libraries(
+    bench_reduction
+    PRIVATE
+    cuda_kernels
+)
+
+set_target_properties(
+    bench_reduction
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+    ${CMAKE_BINARY_DIR}/bin
+)
+
+
+
+# =====================================
+# Ctest
+# =====================================
+
 enable_testing()
 
 add_test(
     NAME vector_add_test
     COMMAND bench_vector_add
+)
+
+add_test(
+    NAME reduction_test
+    COMMAND bench_reduction
 )
 
