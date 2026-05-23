@@ -2,9 +2,9 @@
 #include "cuda_utils.cuh"
 #include <cuda/cmath>
 
-void reduce_cpu(const float* x, double& out, size_t n)
+void reduce_cpu(const float* x, float& out, size_t n)
 {
-    out = double{};
+    out = float{};
     for(size_t i = 0; i < n; ++i)
     {
         out += x[i];
@@ -103,7 +103,7 @@ void launch_reduce_block(const float* x_dev, float* partial_sum_dev, size_t n, i
 /**
  * Grid-stride loop version
  */
-__global__ void reduce_grid_stride_kernel(const float* input, float* partial_sum_out, size_t n)
+__global__ void reduce_grid_stride_block_kernel(const float* input, float* partial_sum_out, size_t n)
 {
     extern __shared__ float local_array[];
 
@@ -140,19 +140,19 @@ __global__ void reduce_grid_stride_kernel(const float* input, float* partial_sum
 }
 
 /**
- * @brief Launch grid-stride loop gridh-shared memory reduction kernel
+ * @brief Launch grid-stride-loop block-shared memory reduction kernel
  *
  * @param[in] x_dev            Input array to reduce
  * @param[out] partial_sum_dev  Partial sums from GPU kernel
  * @param[in] n                Length of input array
  */
-void launch_reduce_grid_stride(const float* x_dev, float* partial_sum_dev, size_t n, int block_size, int grid_size)
+void launch_reduce_grid_stride_block(const float* x_dev, float* partial_sum_dev, size_t n, int block_size, int grid_size)
 {
     // int blocks = cuda::ceil_div(n, block_size);
     // Calculate shared bytes for specifying the size of block-shared memory
     size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
 
-    reduce_grid_stride_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
+    reduce_grid_stride_block_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
 
     gpu::cuda_check_last();
 }
