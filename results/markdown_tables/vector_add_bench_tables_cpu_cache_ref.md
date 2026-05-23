@@ -1,6 +1,6 @@
 # Vector Add Benchmark Tables (mainly for CPU cache test)
 
-This file is generated from `results/data/vector_add_cpu_cache_test.csv`. In problem size sweep, N starts from very small value, in order to fit into L1/L2 and L3 caches respectively.
+This file is generated from `results/data/vector_add_cpu_cache_test_ref.csv`. In problem size sweep, N starts from very small value, in order to fit into L1/L2 and L3 caches respectively.
 
 As a reference, the CPU used in this experiment has the following cache hierarchy:
 
