@@ -4,12 +4,6 @@ import pandas as pd
 CSV_PATH = Path("results/data/vector_add.csv")
 OUT_PATH = Path("results/markdown_tables/vector_add_bench_tables.md")
 
-
-def fmt_float(x):
-    if pd.isna(x):
-        return ""
-    return f"{x}"
-
 def main():
     OUT_PATH.parent.mkdir(parents = True, exist_ok = True)
 
