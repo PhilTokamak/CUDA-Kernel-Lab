@@ -7,10 +7,11 @@ Goal: implement and benchmark several CUDA reduction strategies
 - [x] Implement CPU serial reduction
 - [x] Implement CUDA atomic reduction
 - [x] Implement CUDA block-level shared memory
-- [ ] Add correctness check with absolute and relative error
-- [ ] Add benchmark sweep over `n`
-- [ ] Add benchmark sweep over block size
-- [ ] Output benchmark data to `results/data/reduction`
+- [x] grid-stride loop
+- [x] Add correctness check with absolute and relative error
+- [x] Add benchmark sweep over `n`
+- [x] Add benchmark sweep over block size
+- [x] Output benchmark data to `results/data/reduction`
 - [ ] Generate Markdown tables
 - [ ] Write `results/reduction.md`
 
