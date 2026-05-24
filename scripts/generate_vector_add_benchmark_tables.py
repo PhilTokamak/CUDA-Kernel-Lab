@@ -24,8 +24,8 @@ def main():
         # Main results at largest N
 
         f.write("## Main Benchmark Results at Largest N\n\n")
-        f.write(f"N = {max_n:,}\n")
-        f.write(f"DType = {df.iloc[0]["dtype"]}\n")
+        f.write(f"N = {max_n:,}\n\n")
+        f.write(f"DType = {df.iloc[0]["dtype"]}\n\n")
         single_vector_size_MiB = df.loc[(df["n"] == max_n) & (df["mode"] == "cpu")].iloc[0]["bytes"] / 3 / (1 << 20)
         f.write(f"Single vector size = {single_vector_size_MiB} MiB\n\n")
 
@@ -156,11 +156,11 @@ def main():
         # Block size sweep at largest N
 
         f.write("## CUDA Block Size Sweep\n\n")
-        f.write(f"N = {max_n:,}\n")
+        f.write(f"N = {max_n:,}\n\n")
         block_sweep = df.loc[
             (df["n"] == max_n) &
             (df["version"] == "cuda_naive")].copy()
-        f.write(f"Version = {block_sweep.iloc[0]["dtype"]}\n")
+        f.write(f"DType = {block_sweep.iloc[0]["dtype"]}\n\n")
         f.write(f"Version = {block_sweep.iloc[0]["version"]}\n\n")
 
         block_sweep = block_sweep.sort_values("block_size")
