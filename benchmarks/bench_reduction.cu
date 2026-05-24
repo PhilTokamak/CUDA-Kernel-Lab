@@ -159,8 +159,8 @@ ReductionResult bench_reduction_cpu(const float* x_host, size_t n, int repeat, C
         }, repeat, cpu_timer);
     r.bytes = num_bytes_reduction(n, 0);
     r.ref = r.result;
-    r.bw_GB_s = static_cast<double>(r.bytes) / r.time_stats.avg_ms;
-    r.gflops = static_cast<double>(num_flop_reduction(n)) / r.time_stats.avg_ms;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+    r.gflops = calculate_gflops(num_flop_reduction(n), r.time_stats.avg_ms);
 
     r.abs_error = 0.0;
     r.rel_error = 0.0;
@@ -211,9 +211,8 @@ ReductionResult bench_reduction_kernel_only(
     r.result = read_result();
     calc_error(r);
 
-    r.bw_GB_s = static_cast<double>(r.bytes) / r.time_stats.avg_ms;
-    r.gflops = static_cast<double>(
-                num_flop_reduction(n)) / r.time_stats.avg_ms;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+    r.gflops = calculate_gflops(num_flop_reduction(n), r.time_stats.avg_ms);
 
     return r;
 }
@@ -243,7 +242,7 @@ ReductionResult bench_reduction_h2d(
     r.grid_size = grid_size;
     r.interm_stage_elems = 0;
     r.repeat = repeat;
-    r.bytes = num_bytes_reduction(n, 0);
+    r.bytes = bytes_per_vector<float>(n);
 
     r.time_stats = benchmark_cpu(
         [&]() {
@@ -254,7 +253,7 @@ ReductionResult bench_reduction_h2d(
                 cudaMemcpyDefault));
         }, repeat, cpu_timer);
 
-    r.bw_GB_s = static_cast<double>(r.bytes) / r.time_stats.avg_ms;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
     r.gflops = 0.0;
 
     r.abs_error = 0.0,
@@ -289,7 +288,7 @@ ReductionResult bench_reduction_d2h(
     r.grid_size = grid_size;
     r.interm_stage_elems = interm_stage_elems;
     r.repeat = repeat;
-    r.bytes = num_bytes_reduction(n, interm_stage_elems);
+    r.bytes = bytes_per_vector<float>(interm_stage_elems);
 
     r.time_stats = benchmark_cpu(
         [&]() {
@@ -301,7 +300,7 @@ ReductionResult bench_reduction_d2h(
         }, repeat, cpu_timer);
 
     r.correct = true;
-    r.bw_GB_s = static_cast<double>(r.bytes) / r.time_stats.avg_ms;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
     r.gflops = 0.0;
 
     return r;
@@ -333,7 +332,7 @@ ReductionResult bench_cpu_finalize(
     r.grid_size = grid_size;
     r.interm_stage_elems = interm_stage_elems;
     r.repeat = repeat;
-    r.bytes = num_bytes_reduction(n, interm_stage_elems);
+    r.bytes = num_bytes_reduction(interm_stage_elems, 1);
     r.ref = ref;
 
     float final_sum{};
@@ -345,10 +344,8 @@ ReductionResult bench_cpu_finalize(
     r.result = final_sum;
     calc_error(r);
 
-    r.bw_GB_s = static_cast<double>(r.bytes) / r.time_stats.avg_ms;
-    r.gflops = static_cast<double>(
-                num_flop_reduction(interm_stage_elems))
-                / r.time_stats.avg_ms;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+    r.gflops = calculate_gflops(num_flop_reduction(interm_stage_elems), r.time_stats.avg_ms);
 
     return r;
 }
@@ -485,7 +482,7 @@ int main()
                     n,
                     0,
                     0,
-                    1,
+                    0,
                     final_gpu_sum_host.get(),
                     final_gpu_sum_dev,
                     repeat_copy,
