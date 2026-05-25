@@ -41,11 +41,14 @@ inline void cuda_check_last(
  */
 inline int get_num_sms()
 {
+    int device{};
+    cuda_check(cudaGetDevice(&device));
+
     int num_sms{};
     cuda_check(cudaDeviceGetAttribute(
         &num_sms,
         cudaDevAttrMultiProcessorCount,
-        0));
+        device));
 
     return num_sms;
 }
