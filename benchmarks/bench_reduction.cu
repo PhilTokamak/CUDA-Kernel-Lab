@@ -41,7 +41,7 @@ struct ReductionResult
 
 inline size_t num_flop_reduction(size_t n)
 {
-    return bytes_per_vector<float>(n) - 1;
+    return n> 0? n - 1 : 0;
 }
 
 inline size_t num_bytes_reduction(size_t n, size_t interm_stage_elems)
@@ -190,7 +190,7 @@ ReductionResult bench_reduction_kernel_only(
     r.version = version;
     r.mode = mode;
     r.dtype = dtype;
-    r.size_of_dtype = sizeof(dtype);
+    r.size_of_dtype = sizeof(float);
     r.n = n;
     r.block_size = block_size;
     r.grid_size = grid_size;
@@ -236,7 +236,7 @@ ReductionResult bench_reduction_h2d(
     r.version = version;
     r.mode = mode;
     r.dtype = dtype;
-    r.size_of_dtype = sizeof(dtype);
+    r.size_of_dtype = sizeof(float);
     r.n = n;
     r.block_size = block_size;
     r.grid_size = grid_size;
@@ -282,7 +282,7 @@ ReductionResult bench_reduction_d2h(
     r.version = version;
     r.mode = mode;
     r.dtype = dtype;
-    r.size_of_dtype = sizeof(dtype);
+    r.size_of_dtype = sizeof(float);
     r.n = n;
     r.block_size = block_size;
     r.grid_size = grid_size;
@@ -326,7 +326,7 @@ ReductionResult bench_cpu_finalize(
     r.version = version;
     r.mode = mode;
     r.dtype = dtype;
-    r.size_of_dtype = sizeof(dtype);
+    r.size_of_dtype = sizeof(float);
     r.n = n;
     r.block_size = block_size;
     r.grid_size = grid_size;
