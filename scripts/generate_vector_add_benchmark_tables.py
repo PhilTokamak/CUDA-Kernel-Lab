@@ -121,6 +121,7 @@ def main():
 
         # Add synthetic GPU end-to-end row: H2D + best GPU kernel + D2H
         if (not h2d.empty) and (not d2h.empty) and (not gpu.empty):
+            best_gpu = gpu.loc[gpu["avg_ms"].idxmin()]
             h2d_time = h2d.iloc[0]["avg_ms"]
             d2h_time = d2h.iloc[0]["avg_ms"]
             kernel_time = best_gpu["avg_ms"]
