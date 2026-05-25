@@ -29,10 +29,25 @@ inline void cuda_check(
     }
 }
 
+
 inline void cuda_check_last(
     std::source_location loc = std::source_location::current())
 {
     cuda_check(cudaGetLastError(), loc);
+}
+
+/**
+ * This function gets the number of SM for the GPU
+ */
+inline int get_num_sms()
+{
+    int num_sms{};
+    cuda_check(cudaDeviceGetAttribute(
+        &num_sms,
+        cudaDevAttrMultiProcessorCount,
+        0));
+
+    return num_sms;
 }
 
 } // namespace gpu
@@ -52,6 +67,7 @@ inline bool check_result(const float* a, const float* b, size_t num_elem, float 
     return true;
 }
 
+
 struct CudaHostDeleter
 {
     void operator()(float* ptr) const
@@ -62,6 +78,7 @@ struct CudaHostDeleter
         }
     }
 };
+
 
 using host_ptr = std::unique_ptr<float[], CudaHostDeleter>;
 
@@ -79,3 +96,111 @@ T* cuda_malloc_host(size_t n)
 
     return ptr;
 }
+
+
+/**
+ * This is a class to manage device memory allocation based
+ * on RAII and Rule of Five
+ */
+template <typename T>
+class DeviceBuffer
+{
+public:
+    DeviceBuffer() = default;
+
+    explicit DeviceBuffer(size_t count)
+    {
+        allocate(count);
+    }
+
+    ~DeviceBuffer()
+    {
+        release();
+    }
+
+    // Delete copy constructor
+    DeviceBuffer(const DeviceBuffer&) = delete;
+    // Delete copy assignment operator
+    DeviceBuffer& operator=(const DeviceBuffer&) = delete;
+
+    // Move constructor
+    DeviceBuffer(DeviceBuffer&& other) noexcept
+        : _ptr(other._ptr),
+          _count(other._count)
+    {
+        other._ptr = nullptr;
+        other._count = 0;
+    }
+
+    // Move assignement operator
+    DeviceBuffer& operator=(DeviceBuffer&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+
+            _ptr = other._ptr;
+            _count = other._count;
+
+            other._ptr = nullptr;
+            other._count = 0;
+        }
+        return *this;
+    }
+
+    // Swap
+    void swap(DeviceBuffer& other) noexcept
+    {
+        std::swap(_ptr, other._ptr);
+        std::swap(_count, other._count);
+    }
+
+    T* get()
+    {
+        return _ptr;
+    }
+
+    const T* get() const
+    {
+        return _ptr;
+    }
+
+    size_t count() const
+    {
+        return _count;
+    }
+
+    size_t bytes() const
+    {
+        return _count * sizeof(T);
+    }
+
+    void allocate(size_t count)
+    {
+        release();
+
+        _count = count;
+
+        if(_count > 0)
+        {
+            gpu::cuda_check(cudaMalloc(
+                reinterpret_cast<void**>(&_ptr),
+                _count * sizeof(T)
+            ));
+        }
+    }
+
+    void release()
+    {
+        if (_ptr != nullptr)
+        {
+            cudaFree(_ptr);
+            _ptr = nullptr;
+            _count = 0;
+        }
+    }
+
+private:
+    T* _ptr{nullptr};
+    size_t _count{0};
+};
