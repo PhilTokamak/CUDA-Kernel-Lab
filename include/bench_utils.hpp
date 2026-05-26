@@ -95,3 +95,11 @@ inline size_t bytes_per_vector(size_t num_elem)
 {
     return num_elem * sizeof(T);
 }
+
+struct DTypeInfo
+{
+    std::string name;
+    size_t size;
+};
+
+const DTypeInfo FP32_DTYPE{"fp32", sizeof(float)};

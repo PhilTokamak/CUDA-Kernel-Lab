@@ -66,7 +66,7 @@ struct BenchmarkConfig
 
 inline size_t num_flop_reduction(size_t n)
 {
-    return n> 0 ? n - 1 : 0;
+    return n > 0 ? n - 1 : 0;
 }
 
 
@@ -112,8 +112,7 @@ ReductionResult make_reduction_result(
     const std::string& kernel,
     const std::string& version,
     const std::string& mode,
-    const std::string& dtype,
-    size_t size_of_dtype,
+    const DTypeInfo& dtype_info,
     size_t n,
     int block_size,
     int grid_size,
@@ -125,8 +124,8 @@ ReductionResult make_reduction_result(
     r.kernel = kernel;
     r.version = version;
     r.mode = mode;
-    r.dtype = dtype;
-    r.size_of_dtype = size_of_dtype;
+    r.dtype = dtype_info.name;
+    r.size_of_dtype = dtype_info.size;
 
     r.n = n;
     r.block_size = block_size;
@@ -221,8 +220,7 @@ ReductionResult bench_reduction_cpu(
         "reduction",
         "cpu_serial",
         "cpu",
-        "fp32",
-        sizeof(float),
+        FP32_DTYPE,
         n,
         0,
         0,
@@ -251,7 +249,6 @@ ReductionResult bench_reduction_h2d(
     const std::string& kernel,
     const std::string& version,
     const std::string& mode,
-    const std::string& dtype,
     size_t n,
     int block_size,
     int grid_size,
@@ -264,8 +261,7 @@ ReductionResult bench_reduction_h2d(
         kernel,
         version,
         mode,
-        dtype,
-        sizeof(dtype),
+        FP32_DTYPE,
         n,
         block_size,
         grid_size,
@@ -300,7 +296,6 @@ ReductionResult bench_reduction_kernel_only(
     const std::string& kernel,
     const std::string& version,
     const std::string& mode,
-    const std::string& dtype,
     size_t n,
     int block_size,
     int grid_size,
@@ -315,8 +310,7 @@ ReductionResult bench_reduction_kernel_only(
         kernel,
         version,
         mode,
-        dtype,
-        sizeof(float),
+        FP32_DTYPE,
         n,
         block_size,
         grid_size,
@@ -349,7 +343,6 @@ ReductionResult bench_reduction_d2h(
     const std::string& kernel,
     const std::string& version,
     const std::string& mode,
-    const std::string& dtype,
     size_t n,
     int block_size,
     int grid_size,
@@ -363,8 +356,7 @@ ReductionResult bench_reduction_d2h(
         kernel,
         version,
         mode,
-        dtype,
-        sizeof(float),
+        FP32_DTYPE,
         n,
         block_size,
         grid_size,
@@ -394,7 +386,6 @@ ReductionResult bench_cpu_finalize(
     const std::string& kernel,
     const std::string& version,
     const std::string& mode,
-    const std::string& dtype,
     size_t n,
     int block_size,
     int grid_size,
@@ -408,8 +399,7 @@ ReductionResult bench_cpu_finalize(
         kernel,
         version,
         mode,
-        dtype,
-        sizeof(float),
+        FP32_DTYPE,
         n,
         block_size,
         grid_size,
@@ -456,7 +446,6 @@ void run_atomic_add_benchmark(
         config.kernel,
         version,
         "cuda_kernel",
-        "fp32",
         n,
         block_size,
         grid_size_atomic,
@@ -493,7 +482,6 @@ void run_atomic_add_benchmark(
         config.kernel,
         version,
         "d2h",
-        "fp32",
         n,
         block_size,
         grid_size_atomic,
@@ -536,7 +524,6 @@ void run_block_shared_mem_benchmark(
         config.kernel,
         version,
         "cuda_kernel",
-        "fp32",
         n,
         block_size,
         grid_size_block_version,
@@ -574,7 +561,6 @@ void run_block_shared_mem_benchmark(
         config.kernel,
         version,
         "d2h",
-        "fp32",
         n,
         block_size,
         grid_size_block_version,
@@ -592,7 +578,6 @@ void run_block_shared_mem_benchmark(
         config.kernel,
         version,
         "cpu_finalize",
-        "fp32",
         n,
         block_size,
         grid_size_block_version,
@@ -637,7 +622,6 @@ void run_grid_stride_block_shared_benchmark(
         config.kernel,
         version,
         "cuda_kernel",
-        "fp32",
         n,
         block_size,
         grid_size_grid_stride_version,
@@ -676,7 +660,6 @@ void run_grid_stride_block_shared_benchmark(
         config.kernel,
         version,
         "d2h",
-        "fp32",
         n,
         block_size,
         grid_size_grid_stride_version,
@@ -694,7 +677,6 @@ void run_grid_stride_block_shared_benchmark(
         config.kernel,
         version,
         "cpu_finalize",
-        "fp32",
         n,
         block_size,
         grid_size_grid_stride_version,
@@ -803,7 +785,6 @@ void run_single_size_benchmark(
         config.kernel,
         "all_gpu_version",
         "h2d",
-        "fp32",
         n,
         0,
         0,
