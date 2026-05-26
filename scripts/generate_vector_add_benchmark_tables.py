@@ -4,8 +4,9 @@ import pandas as pd
 CSV_PATH = Path("results/data/vector_add.csv")
 OUT_PATH = Path("results/markdown_tables/vector_add_bench_tables.md")
 
+
 def main():
-    OUT_PATH.parent.mkdir(parents = True, exist_ok = True)
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     df = pd.read_csv(CSV_PATH)
 
@@ -15,7 +16,7 @@ def main():
         if col in df.columns:
             df[col] = df[col].astype(float)
 
-    max_n = df["n"].max();
+    max_n = df["n"].max()
 
     with open(OUT_PATH, "w") as f:
         f.write("# Auto-Generated Vector Add Benchmark Tables\n\n")
@@ -26,7 +27,11 @@ def main():
         f.write("## Main Benchmark Results at Largest N\n\n")
         f.write(f"N = {max_n:,}\n\n")
         f.write(f"DType = {df.iloc[0]["dtype"]}\n\n")
-        single_vector_size_MiB = df.loc[(df["n"] == max_n) & (df["mode"] == "cpu")].iloc[0]["bytes"] / 3 / (1 << 20)
+        single_vector_size_MiB = (
+            df.loc[(df["n"] == max_n) & (df["mode"] == "cpu")].iloc[0]["bytes"]
+            / 3
+            / (1 << 20)
+        )
         f.write(f"Single vector size = {single_vector_size_MiB} MiB\n\n")
 
         main_rows = []
@@ -36,20 +41,22 @@ def main():
             row = cpu.iloc[0]
             cpu_ref_time = cpu.loc[cpu["version"] == "cpu_serial", "avg_ms"].iloc[0]
             data_moved_MiB = row["bytes"] / (1 << 20)
-            main_rows.append({
-                "Version": row["version"],
-                "Mode": row["mode"],
-                "Effective Data Moved [MiB]": data_moved_MiB,
-                "Block Size": "N/A",
-                "Avg Time [ms]": row["avg_ms"],
-                "Min Time [ms]": row["min_ms"],
-                "Max Time [ms]": row["max_ms"],
-                "Std Dev": row["std_ms"],
-                "Effective BW [GB/s]": row["bw_GB_s"],
-                "GFLOP/s": row["gflops"],
-                "Correct": row["correct"],
-                "Speedup": f"{1.00}x"
-            })
+            main_rows.append(
+                {
+                    "Version": row["version"],
+                    "Mode": row["mode"],
+                    "Effective Data Moved [MiB]": data_moved_MiB,
+                    "Block Size": "N/A",
+                    "Avg Time [ms]": row["avg_ms"],
+                    "Min Time [ms]": row["min_ms"],
+                    "Max Time [ms]": row["max_ms"],
+                    "Std Dev": row["std_ms"],
+                    "Effective BW [GB/s]": row["bw_GB_s"],
+                    "GFLOP/s": row["gflops"],
+                    "Correct": row["correct"],
+                    "Speedup": f"{1.00}x",
+                }
+            )
         else:
             cpu_ref_time = None
 
@@ -63,20 +70,22 @@ def main():
             if cpu_ref_time is not None:
                 speedup = cpu_ref_time / best_gpu["avg_ms"]
 
-            main_rows.append({
-                "Version": best_gpu["version"],
-                "Mode": best_gpu["mode"],
-                "Effective Data Moved [MiB]": data_moved_MiB,
-                "Block Size": best_gpu["block_size"],
-                "Avg Time [ms]": best_gpu["avg_ms"],
-                "Min Time [ms]": best_gpu["min_ms"],
-                "Max Time [ms]": best_gpu["max_ms"],
-                "Std Dev": best_gpu["std_ms"],
-                "Effective BW [GB/s]": best_gpu["bw_GB_s"],
-                "GFLOP/s": best_gpu["gflops"],
-                "Correct": best_gpu["correct"],
-                "Speedup": f"{speedup:.2f}x" if speedup != "" else "?"
-            })
+            main_rows.append(
+                {
+                    "Version": best_gpu["version"],
+                    "Mode": best_gpu["mode"],
+                    "Effective Data Moved [MiB]": data_moved_MiB,
+                    "Block Size": best_gpu["block_size"],
+                    "Avg Time [ms]": best_gpu["avg_ms"],
+                    "Min Time [ms]": best_gpu["min_ms"],
+                    "Max Time [ms]": best_gpu["max_ms"],
+                    "Std Dev": best_gpu["std_ms"],
+                    "Effective BW [GB/s]": best_gpu["bw_GB_s"],
+                    "GFLOP/s": best_gpu["gflops"],
+                    "Correct": best_gpu["correct"],
+                    "Speedup": f"{speedup:.2f}x" if speedup != "" else "?",
+                }
+            )
 
         h2d = df.loc[(df["n"] == max_n) & (df["mode"] == "h2d")]
         d2h = df.loc[(df["n"] == max_n) & (df["mode"] == "d2h")]
@@ -85,39 +94,43 @@ def main():
             row = h2d.iloc[0]
             data_moved_MiB = row["bytes"] / (1 << 20)
 
-            main_rows.append({
-                "Version": row["version"],
-                "Mode": row["mode"],
-                "Effective Data Moved [MiB]": data_moved_MiB,
-                "Block Size": "N/A",
-                "Avg Time [ms]": row["avg_ms"],
-                "Min Time [ms]": row["min_ms"],
-                "Max Time [ms]": row["max_ms"],
-                "Std Dev": row["std_ms"],
-                "Effective BW [GB/s]": row["bw_GB_s"],
-                "GFLOP/s": "N/A",
-                "Correct": "N/A",
-                "Speedup": "N/A"
-            })
+            main_rows.append(
+                {
+                    "Version": row["version"],
+                    "Mode": row["mode"],
+                    "Effective Data Moved [MiB]": data_moved_MiB,
+                    "Block Size": "N/A",
+                    "Avg Time [ms]": row["avg_ms"],
+                    "Min Time [ms]": row["min_ms"],
+                    "Max Time [ms]": row["max_ms"],
+                    "Std Dev": row["std_ms"],
+                    "Effective BW [GB/s]": row["bw_GB_s"],
+                    "GFLOP/s": "N/A",
+                    "Correct": "N/A",
+                    "Speedup": "N/A",
+                }
+            )
 
         if not d2h.empty:
             row = d2h.iloc[0]
             data_moved_MiB = row["bytes"] / (1 << 20)
 
-            main_rows.append({
-                "Version": row["version"],
-                "Mode": row["mode"],
-                "Effective Data Moved [MiB]": data_moved_MiB,
-                "Block Size": "N/A",
-                "Avg Time [ms]": row["avg_ms"],
-                "Min Time [ms]": row["min_ms"],
-                "Max Time [ms]": row["max_ms"],
-                "Std Dev": row["std_ms"],
-                "Effective BW [GB/s]": row["bw_GB_s"],
-                "GFLOP/s": "N/A",
-                "Correct": "N/A",
-                "Speedup": "N/A"
-            })
+            main_rows.append(
+                {
+                    "Version": row["version"],
+                    "Mode": row["mode"],
+                    "Effective Data Moved [MiB]": data_moved_MiB,
+                    "Block Size": "N/A",
+                    "Avg Time [ms]": row["avg_ms"],
+                    "Min Time [ms]": row["min_ms"],
+                    "Max Time [ms]": row["max_ms"],
+                    "Std Dev": row["std_ms"],
+                    "Effective BW [GB/s]": row["bw_GB_s"],
+                    "GFLOP/s": "N/A",
+                    "Correct": "N/A",
+                    "Speedup": "N/A",
+                }
+            )
 
         # Add synthetic GPU end-to-end row: H2D + best GPU kernel + D2H
         if (not h2d.empty) and (not d2h.empty) and (not gpu.empty):
@@ -128,26 +141,32 @@ def main():
             e2e_time = h2d_time + kernel_time + d2h_time
 
             data_moved_MiB = (h2d.iloc[0]["bytes"] + d2h.iloc[0]["bytes"]) / (1 << 20)
-            bw_GB_s = float(h2d.iloc[0]["bytes"] + d2h.iloc[0]["bytes"]) / (e2e_time / 1000) / 1e9
+            bw_GB_s = (
+                float(h2d.iloc[0]["bytes"] + d2h.iloc[0]["bytes"])
+                / (e2e_time / 1000)
+                / 1e9
+            )
 
             e2e_speedup = ""
             if cpu_ref_time is not None:
                 e2e_speedup = cpu_ref_time / e2e_time
 
-            main_rows.append({
-                "Version": "cuda_naive_e2e",
-                "Mode": "h2d + kernel + d2h",
-                "Effective Data Moved [MiB]": data_moved_MiB,
-                "Block Size": best_gpu["block_size"],
-                "Avg Time [ms]": e2e_time,
-                "Min Time [ms]": "N/A",
-                "Max Time [ms]": "N/A",
-                "Std Dev": "N/A",
-                "Effective BW [GB/s]": f"{bw_GB_s:.3f}",
-                "GFLOP/s": "N/A",
-                "Correct": "N/A",
-                "Speedup": f"{e2e_speedup:.2f}x" if e2e_speedup != "" else "?"
-            })
+            main_rows.append(
+                {
+                    "Version": "cuda_naive_e2e",
+                    "Mode": "h2d + kernel + d2h",
+                    "Effective Data Moved [MiB]": data_moved_MiB,
+                    "Block Size": best_gpu["block_size"],
+                    "Avg Time [ms]": e2e_time,
+                    "Min Time [ms]": "N/A",
+                    "Max Time [ms]": "N/A",
+                    "Std Dev": "N/A",
+                    "Effective BW [GB/s]": f"{bw_GB_s:.3f}",
+                    "GFLOP/s": "N/A",
+                    "Correct": "N/A",
+                    "Speedup": f"{e2e_speedup:.2f}x" if e2e_speedup != "" else "?",
+                }
+            )
 
         main_df = pd.DataFrame(main_rows)
 
@@ -159,34 +178,38 @@ def main():
         f.write("## CUDA Block Size Sweep\n\n")
         f.write(f"N = {max_n:,}\n\n")
         block_sweep = df.loc[
-            (df["n"] == max_n) &
-            (df["version"] == "cuda_naive")].copy()
+            (df["n"] == max_n) & (df["version"] == "cuda_naive")
+        ].copy()
         f.write(f"DType = {block_sweep.iloc[0]["dtype"]}\n\n")
         f.write(f"Version = {block_sweep.iloc[0]["version"]}\n\n")
 
         block_sweep = block_sweep.sort_values("block_size")
 
-        block_table = block_sweep[[
-            "block_size",
-            "avg_ms",
-            "min_ms",
-            "max_ms",
-            "std_ms",
-            "bw_GB_s",
-            "gflops",
-            "correct"
-        ]].copy()
+        block_table = block_sweep[
+            [
+                "block_size",
+                "avg_ms",
+                "min_ms",
+                "max_ms",
+                "std_ms",
+                "bw_GB_s",
+                "gflops",
+                "correct",
+            ]
+        ].copy()
 
-        block_table = block_table.rename(columns={
-            "block_size" : "Block Size",
-            "avg_ms" : "Avg Time [ms]",
-            "min_ms" : "Min Time [ms]",
-            "max_ms" : "Max Time [ms]",
-            "std_ms" : "Std Dev",
-            "bw_GB_s" : "Effective BW [GB/s]",
-            "gflops" : "GFLOP/s",
-            "correct" : "Correct"
-        })
+        block_table = block_table.rename(
+            columns={
+                "block_size": "Block Size",
+                "avg_ms": "Avg Time [ms]",
+                "min_ms": "Min Time [ms]",
+                "max_ms": "Max Time [ms]",
+                "std_ms": "Std Dev",
+                "bw_GB_s": "Effective BW [GB/s]",
+                "gflops": "GFLOP/s",
+                "correct": "Correct",
+            }
+        )
 
         block_table["Speedup"] = cpu_ref_time / block_table["Avg Time [ms]"]
 
@@ -201,9 +224,11 @@ def main():
 
         for n in sorted(df["n"].unique()):
             cpu_n = df.loc[(df["n"] == n) & (df["mode"] == "cpu")]
-            gpu_n = df.loc[(df["n"] == n) &
-                           (df["mode"] == "cuda_kernel") &
-                           (df["version"] == "cuda_naive")]
+            gpu_n = df.loc[
+                (df["n"] == n)
+                & (df["mode"] == "cuda_kernel")
+                & (df["version"] == "cuda_naive")
+            ]
 
             if cpu_n.empty or gpu_n.empty:
                 continue
@@ -223,24 +248,27 @@ def main():
             e2e_speedup = ""
 
             if not h2d_n.empty and not d2h_n.empty:
-                e2e_time = h2d_n.iloc[0]["avg_ms"]\
-                        + gpu_time_n + d2h_n.iloc[0]["avg_ms"]
+                e2e_time = (
+                    h2d_n.iloc[0]["avg_ms"] + gpu_time_n + d2h_n.iloc[0]["avg_ms"]
+                )
                 e2e_speedup = cpu_time_n / e2e_time
 
             kernel_speedup = cpu_time_n / gpu_time_n
 
-            sweep_n_rows.append({
-                "N" : f"{n:,}",
-                "Single Vector Size [MiB]" : single_vector_size_MiB,
-                "CPU Time [ms]" : cpu_time_n,
-                "CPU BW [GB/s]" : cpu_row["bw_GB_s"],
-                "Best GPU Block" : best_gpu_n["block_size"],
-                "GPU Kernel Time [ms]" : gpu_time_n,
-                "GPU Kernel Effective BW [GB/s]" : best_gpu_n["bw_GB_s"],
-                "Kernel Speedup" : f"{kernel_speedup:.2f}x",
-                "GPU E2E Time [ms]" : e2e_time,
-                "E2E Speedup": f"{e2e_speedup:.2f}x"
-            })
+            sweep_n_rows.append(
+                {
+                    "N": f"{n:,}",
+                    "Single Vector Size [MiB]": single_vector_size_MiB,
+                    "CPU Time [ms]": cpu_time_n,
+                    "CPU BW [GB/s]": cpu_row["bw_GB_s"],
+                    "Best GPU Block": best_gpu_n["block_size"],
+                    "GPU Kernel Time [ms]": gpu_time_n,
+                    "GPU Kernel Effective BW [GB/s]": best_gpu_n["bw_GB_s"],
+                    "Kernel Speedup": f"{kernel_speedup:.2f}x",
+                    "GPU E2E Time [ms]": e2e_time,
+                    "E2E Speedup": f"{e2e_speedup:.2f}x",
+                }
+            )
 
         sweep_n_rows_df = pd.DataFrame(sweep_n_rows)
 
@@ -248,7 +276,6 @@ def main():
         f.write("\n\n")
 
     print(f"Wrote {OUT_PATH}")
-
 
 
 if __name__ == "__main__":
