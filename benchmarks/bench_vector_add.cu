@@ -46,7 +46,7 @@ inline size_t d2h_bytes_vector_add(size_t num_elem)
 inline size_t num_flop_vector_add(size_t num_elem)
 {
     // 1 addition per element
-    return bytes_per_vector<float>(num_elem);
+    return num_elem;
 }
 
 void write_csv_header(std::ofstream& out)
