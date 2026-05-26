@@ -8,7 +8,6 @@
 #include <vector>
 #include <fmt/ranges.h>
 #include <fmt/ostream.h>
-#include <filesystem>
 #include <cuda/cmath>
 
 struct VectorAddResult
@@ -71,17 +70,6 @@ void init_array(float* a, size_t num_elem)
     }
 }
 
-void create_output_directory(const std::filesystem::path& output_dir)
-{
-    // Create directory to save benchmark results csv file
-    std::error_code ec;
-    std::filesystem::create_directories(output_dir, ec);
-
-    if (ec)
-    {
-        fmt::print("{}\n", ec.message());
-    }
-}
 
 inline size_t bytes_vector_add(size_t num_elem)
 {

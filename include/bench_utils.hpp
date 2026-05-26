@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <numeric>
+#include <filesystem>
 
 #include "timer.hpp"
 
@@ -103,3 +104,16 @@ struct DTypeInfo
 };
 
 const DTypeInfo FP32_DTYPE{"fp32", sizeof(float)};
+
+
+void create_output_directory(const std::filesystem::path& output_dir)
+{
+    // Create directory to save benchmark results csv file
+    std::error_code ec;
+    std::filesystem::create_directories(output_dir, ec);
+
+    if (ec)
+    {
+        fmt::print("{}\n", ec.message());
+    }
+}

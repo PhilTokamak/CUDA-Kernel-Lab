@@ -8,7 +8,6 @@
 #include <vector>
 #include <fmt/ranges.h>
 #include <fmt/ostream.h>
-#include <filesystem>
 #include <cuda/cmath>
 
 struct ReductionResult
@@ -91,19 +90,6 @@ void init_array(float* a, size_t num_elem)
     for (size_t i = 0; i < num_elem; ++i)
     {
         a[i] = 1.0f;
-    }
-}
-
-
-void create_output_directory(const std::filesystem::path& output_dir)
-{
-    // Create directory to save benchmark results csv file
-    std::error_code ec;
-    std::filesystem::create_directories(output_dir, ec);
-
-    if (ec)
-    {
-        fmt::print("{}\n", ec.message());
     }
 }
 
