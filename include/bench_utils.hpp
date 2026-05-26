@@ -1,7 +1,7 @@
 #pragma once
-#include <vector>
-#include <numeric>
 #include <filesystem>
+#include <numeric>
+#include <vector>
 
 #include "timer.hpp"
 
@@ -27,10 +27,11 @@ inline TimeStats compute_time_stats(const std::vector<double>& samples)
     s.max_ms = *std::max_element(samples.begin(), samples.end());
 
     double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
-    s.avg_ms = sum / static_cast<double>(samples.size());
+    s.avg_ms   = sum / static_cast<double>(samples.size());
 
     double var = 0.0;
-    for (double x : samples) {
+    for (double x : samples)
+    {
         double d = x - s.avg_ms;
         var += d * d;
     }
@@ -91,8 +92,7 @@ inline double calculate_gflops(size_t n_flop, double ms)
     return static_cast<double>(n_flop) / (ms / 1000.0 * 1e9);
 }
 
-template<typename T>
-inline size_t bytes_per_vector(size_t num_elem)
+template <typename T> inline size_t bytes_per_vector(size_t num_elem)
 {
     return num_elem * sizeof(T);
 }
@@ -104,7 +104,6 @@ struct DTypeInfo
 };
 
 const DTypeInfo FP32_DTYPE{"fp32", sizeof(float)};
-
 
 void create_output_directory(const std::filesystem::path& output_dir)
 {
