@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from io import StringIO
 
 import pandas as pd
+from jinja2 import Environment, FileSystemLoader
 
 
 @dataclass(frozen=True)
@@ -11,6 +13,21 @@ class BenchmarkTableConfig:
     out_path: Path = Path("results/markdown_tables/reduction_bench_tables.md")
     kernel_name: str = "Reduction"
     large_n: int = 1 << 24
+
+
+@dataclass(frozen=True)
+class BenchmarkReportConfig(BenchmarkTableConfig):
+    template_dir: Path = Path("results/templates")
+    template_name: str = "reduction_report.md.j2"
+    report_out_path: Path = Path("results/reduction.md")
+
+    @property
+    def md_table_rel_path(self) -> Path:
+        return self.out_path.relative_to("results")
+
+    @property
+    def csv_rel_path(self) -> Path:
+        return self.csv_path.relative_to("results")
 
 
 FLOAT_COLUMNS = [
@@ -59,7 +76,7 @@ TABLE_COLUMNS = {
         "Abs Error",
         "Rel Error",
         "Correct",
-        "Speedup",
+        "Kernel-stage Speedup",
     ],
     "problem_size_sweep": [
         "N",
@@ -398,7 +415,7 @@ def build_block_sweep_table_rows(
                 "Abs Error": format_float(row["abs_error"], 3),
                 "Rel Error": format_float(row["rel_error"], 3),
                 "Correct": row["correct"],
-                "Speedup": format_speedup(speedup),
+                "Kernel-stage Speedup": format_speedup(speedup),
             }
         )
 
@@ -483,6 +500,90 @@ def build_problem_size_row(
     }
 
 
+def build_problem_size_numeric_row(
+    df: pd.DataFrame,
+    df_gpu: pd.DataFrame,
+    gpu_version_rows: pd.DataFrame,
+    n: int,
+) -> dict[str, Any] | None:
+    cpu_n = get_cpu_serial_rows_at_n(df, n)
+    gpu_n = gpu_version_rows.loc[gpu_version_rows["n"] == n]
+
+    if cpu_n.empty or gpu_n.empty:
+        return None
+
+    cpu_row = cpu_n.iloc[0]
+
+    best_gpu_n = get_best_kernel_row(gpu_n)
+
+    best_block_size = int(best_gpu_n["block_size"])
+    best_grid_size = int(best_gpu_n["grid_size"])
+
+    size_of_dtype = int(cpu_row["size_of_dtype"])
+    single_vector_size_MiB = size_of_dtype * int(n) / (1 << 20)
+
+    cpu_time_n = float(cpu_row["avg_ms"])
+    cpu_bw_n = float(cpu_row["bw_GB_s"])
+    ref = float(cpu_row["result"])
+
+    time_h2d_n = float(get_h2d_time_at_n(df_gpu, n))
+    time_kernel = float(best_gpu_n["avg_ms"])
+
+    time_d2h, _ = get_matching_stage_time(
+        gpu_rows_for_version_at_n=gpu_n,
+        mode="d2h",
+        best_kernel_row=best_gpu_n,
+    )
+    time_d2h = float(time_d2h)
+
+    time_cpu_finalize, correct, result = get_cpu_finalize_info(
+        gpu_rows_for_version_at_n=gpu_n,
+        best_kernel_row=best_gpu_n,
+    )
+
+    time_cpu_finalize_for_sum = (
+        0.0 if time_cpu_finalize == "N/A" else float(time_cpu_finalize)
+    )
+
+    time_post_h2d = time_kernel + time_d2h + time_cpu_finalize_for_sum
+    time_e2e = time_h2d_n + time_post_h2d
+
+    speedup_post_h2d = cpu_time_n / time_post_h2d
+    speedup_e2e = cpu_time_n / time_e2e
+
+    useful_bytes = float(cpu_row["bytes"])
+    bw_post_h2d = bandwidth_GB_s(useful_bytes, time_post_h2d)
+    bw_e2e = bandwidth_GB_s(useful_bytes, time_e2e)
+
+    useful_n_flop = num_flop_reduction(n)
+    gflops_post_h2d = calculate_gflops(useful_n_flop, time_post_h2d)
+    gflops_e2e = calculate_gflops(useful_n_flop, time_e2e)
+
+    return {
+        "n": int(n),
+        "single_vector_size_MiB": single_vector_size_MiB,
+        "cpu_time_ms": cpu_time_n,
+        "cpu_bw_GB_s": cpu_bw_n,
+        "best_block_size": best_block_size,
+        "best_grid_size": best_grid_size,
+        "kernel_time_ms": time_kernel,
+        "h2d_time_ms": time_h2d_n,
+        "d2h_time_ms": time_d2h,
+        "cpu_finalize_time_ms": time_cpu_finalize_for_sum,
+        "post_h2d_time_ms": time_post_h2d,
+        "e2e_time_ms": time_e2e,
+        "post_h2d_bw_GB_s": bw_post_h2d,
+        "e2e_bw_GB_s": bw_e2e,
+        "post_h2d_gflops": gflops_post_h2d,
+        "e2e_gflops": gflops_e2e,
+        "result": float(result),
+        "ref": ref,
+        "correct": bool(correct),
+        "post_h2d_speedup": speedup_post_h2d,
+        "e2e_speedup": speedup_e2e,
+    }
+
+
 def build_problem_size_table_rows_for_version(
     df: pd.DataFrame,
     df_gpu: pd.DataFrame,
@@ -504,6 +605,29 @@ def build_problem_size_table_rows_for_version(
             rows.append(row)
 
     return rows
+
+
+def build_problem_size_numeric_records_for_version(
+    df: pd.DataFrame,
+    df_gpu: pd.DataFrame,
+    version: str,
+) -> list[dict[str, Any]]:
+    gpu_version_rows = df_gpu.loc[df_gpu["version"] == version].copy()
+
+    records: list[dict[str, Any]] = []
+
+    for n in sorted(gpu_version_rows["n"].unique()):
+        row = build_problem_size_numeric_row(
+            df=df,
+            df_gpu=df_gpu,
+            gpu_version_rows=gpu_version_rows,
+            n=int(n),
+        )
+
+        if row is not None:
+            records.append(row)
+
+    return records
 
 
 def write_file_header(
@@ -632,17 +756,481 @@ def write_markdown_tables(
         )
 
 
+def render_markdown_tables_to_string(
+    df: pd.DataFrame,
+    config: BenchmarkTableConfig,
+) -> str:
+    df_gpu = get_gpu_rows(df)
+
+    buffer = StringIO()
+
+    write_file_header(buffer, config)
+
+    write_main_benchmark_section(
+        f=buffer,
+        df=df,
+        df_gpu=df_gpu,
+        config=config,
+    )
+
+    write_block_size_sweep_section(
+        f=buffer,
+        df=df,
+        config=config,
+    )
+
+    write_problem_size_sweep_section(
+        f=buffer,
+        df=df,
+        df_gpu=df_gpu,
+        config=config,
+    )
+
+    return buffer.getvalue()
+
+
+def build_main_summary_records(
+    df: pd.DataFrame,
+    df_gpu: pd.DataFrame,
+    large_n: int,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+
+    cpu_rows = get_cpu_rows_at_n(df, large_n)
+    if cpu_rows.empty:
+        return records
+
+    cpu_row = cpu_rows.loc[cpu_rows["version"] == "cpu_serial"].iloc[0]
+    cpu_ref_time = float(cpu_row["avg_ms"])
+
+    # CPU record
+    records.append(
+        {
+            "version": "cpu_serial",
+            "block_size": "N/A",
+            "grid_size": "N/A",
+            "h2d_time_ms": 0.0,
+            "kernel_time_ms": 0.0,
+            "d2h_time_ms": 0.0,
+            "cpu_finalize_time_ms": 0.0,
+            "post_h2d_time_ms": cpu_ref_time,
+            "e2e_time_ms": cpu_ref_time,
+            "post_h2d_bw_GB_s": float(cpu_row["bw_GB_s"]),
+            "e2e_bw_GB_s": float(cpu_row["bw_GB_s"]),
+            "post_h2d_gflops": float(cpu_row["gflops"]),
+            "e2e_gflops": float(cpu_row["gflops"]),
+            "post_h2d_speedup": 1.0,
+            "e2e_speedup": 1.0,
+            "correct": bool(cpu_row["correct"]),
+        }
+    )
+
+    for version in get_kernel_versions(df_gpu):
+        gpu_rows_for_version_at_large_n = df_gpu.loc[
+            (df_gpu["n"] == large_n) & (df_gpu["version"] == version)
+        ].copy()
+
+        if gpu_rows_for_version_at_large_n.empty:
+            continue
+
+        best_gpu = get_best_kernel_row(gpu_rows_for_version_at_large_n)
+
+        time_h2d = float(get_h2d_time_at_n(df_gpu, large_n))
+        time_kernel = float(best_gpu["avg_ms"])
+
+        time_d2h, _ = get_matching_stage_time(
+            gpu_rows_for_version_at_n=gpu_rows_for_version_at_large_n,
+            mode="d2h",
+            best_kernel_row=best_gpu,
+        )
+
+        time_cpu_finalize, correct, _ = get_cpu_finalize_info(
+            gpu_rows_for_version_at_n=gpu_rows_for_version_at_large_n,
+            best_kernel_row=best_gpu,
+        )
+
+        time_d2h = float(time_d2h)
+        time_cpu_finalize_for_sum = (
+            0.0 if time_cpu_finalize == "N/A" else float(time_cpu_finalize)
+        )
+
+        time_post_h2d = time_kernel + time_d2h + time_cpu_finalize_for_sum
+        time_e2e = time_h2d + time_post_h2d
+
+        useful_bytes = float(cpu_row["bytes"])
+        useful_n_flop = num_flop_reduction(large_n)
+
+        bw_post_h2d = bandwidth_GB_s(useful_bytes, time_post_h2d)
+        bw_e2e = bandwidth_GB_s(useful_bytes, time_e2e)
+
+        gflops_post_h2d = calculate_gflops(useful_n_flop, time_post_h2d)
+        gflops_e2e = calculate_gflops(useful_n_flop, time_e2e)
+
+        speedup_post_h2d = cpu_ref_time / time_post_h2d
+        speedup_e2e = cpu_ref_time / time_e2e
+
+        records.append(
+            {
+                "version": version,
+                "block_size": int(best_gpu["block_size"]),
+                "grid_size": int(best_gpu["grid_size"]),
+                "h2d_time_ms": time_h2d,
+                "kernel_time_ms": time_kernel,
+                "d2h_time_ms": time_d2h,
+                "cpu_finalize_time_ms": time_cpu_finalize_for_sum,
+                "post_h2d_time_ms": time_post_h2d,
+                "e2e_time_ms": time_e2e,
+                "post_h2d_bw_GB_s": bw_post_h2d,
+                "e2e_bw_GB_s": bw_e2e,
+                "post_h2d_gflops": gflops_post_h2d,
+                "e2e_gflops": gflops_e2e,
+                "post_h2d_speedup": speedup_post_h2d,
+                "e2e_speedup": speedup_e2e,
+                "correct": bool(correct),
+            }
+        )
+
+    return records
+
+
+def build_block_sweep_summaries(
+    df: pd.DataFrame,
+    large_n: int,
+) -> list[dict[str, Any]]:
+    block_sweep = get_block_sweep_rows(df, large_n)
+
+    summaries: list[dict[str, Any]] = []
+
+    if block_sweep.empty:
+        return summaries
+
+    for version in sorted(block_sweep["version"].unique()):
+        rows = block_sweep.loc[block_sweep["version"] == version].copy()
+
+        if rows.empty:
+            continue
+
+        rows = rows.sort_values("avg_ms")
+
+        best = rows.iloc[0]
+        slowest = rows.iloc[-1]
+
+        min_time = float(best["avg_ms"])
+        best_block_size = float(best["block_size"])
+        max_time = float(slowest["avg_ms"])
+        slowest_block_size = float(slowest["block_size"])
+
+        time_ratio = max_time / min_time if min_time > 0 else float("nan")
+
+        summaries.append(
+            {
+                "version": version,
+                "best_block_size": int(best["block_size"]),
+                "best_grid_size": int(best["grid_size"]),
+                "best_kernel_time_ms": float(best["avg_ms"]),
+                "best_kernel_bw_GB_s": float(best["bw_GB_s"]),
+                "best_kernel_gflops": float(best["gflops"]),
+                "best_result": float(best["result"]),
+                "best_ref": float(best["ref"]),
+                "best_abs_error": float(best["abs_error"]),
+                "best_rel_error": float(best["rel_error"]),
+                "best_correct": bool(best["correct"]),
+                "kernel_time_min_ms": min_time,
+                "kernel_time_max_ms": max_time,
+                "kernel_time_ratio": time_ratio,
+                "best_block_size": best_block_size,
+                "slowest_block_size": slowest_block_size,
+                "num_block_sizes": int(rows["block_size"].nunique()),
+            }
+        )
+
+    return summaries
+
+
+def build_problem_size_summaries(
+    df: pd.DataFrame,
+    df_gpu: pd.DataFrame,
+) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+
+    for version in get_kernel_versions(df_gpu):
+        records = build_problem_size_numeric_records_for_version(
+            df=df,
+            df_gpu=df_gpu,
+            version=version,
+        )
+
+        if not records:
+            continue
+
+        records = sorted(records, key=lambda r: r["n"])
+
+        first = records[0]
+        last = records[-1]
+
+        best_e2e = min(records, key=lambda r: r["e2e_time_ms"])
+        best_post_h2d = min(records, key=lambda r: r["post_h2d_time_ms"])
+
+        summaries.append(
+            {
+                "version": version,
+                "num_sizes": len(records),
+                "small": first,
+                "large": last,
+                "best_e2e": best_e2e,
+                "best_post_h2d": best_post_h2d,
+                "post_h2d_speedup_growth": (
+                    last["post_h2d_speedup"] / first["post_h2d_speedup"]
+                    if first["post_h2d_speedup"] > 0
+                    else float("nan")
+                ),
+                "e2e_speedup_growth": (
+                    last["e2e_speedup"] / first["e2e_speedup"]
+                    if first["e2e_speedup"] > 0
+                    else float("nan")
+                ),
+            }
+        )
+
+    return summaries
+
+
+def format_summary_record(record: dict[str, Any]) -> dict[str, Any]:
+    out = dict(record)
+
+    for key in [
+        "h2d_time_ms",
+        "kernel_time_ms",
+        "d2h_time_ms",
+        "cpu_finalize_time_ms",
+        "post_h2d_time_ms",
+        "e2e_time_ms",
+    ]:
+        if isinstance(out[key], (int, float)):
+            out[key] = format_float(out[key], 3)
+
+    for key in [
+        "post_h2d_bw_GB_s",
+        "e2e_bw_GB_s",
+        "post_h2d_gflops",
+        "e2e_gflops",
+    ]:
+        if isinstance(out[key], (int, float)):
+            out[key] = format_float(out[key], 2)
+
+    for key in [
+        "post_h2d_speedup",
+        "e2e_speedup",
+    ]:
+        if isinstance(out[key], (int, float)):
+            out[key] = format_speedup(out[key])
+
+    return out
+
+
+def format_block_sweep_summary(record: dict[str, Any]) -> dict[str, Any]:
+    out = dict(record)
+
+    for key in [
+        "best_kernel_time_ms",
+        "best_kernel_bw_GB_s",
+        "best_kernel_gflops",
+        "kernel_time_min_ms",
+        "kernel_time_max_ms",
+        "kernel_time_ratio",
+        "best_result",
+        "best_ref",
+        "best_abs_error",
+        "best_rel_error",
+    ]:
+        if isinstance(out.get(key), (int, float)):
+            if key in [
+                "best_kernel_time_ms",
+                "kernel_time_min_ms",
+                "kernel_time_max_ms",
+            ]:
+                out[key] = format_ms(out[key])
+            elif key in ["kernel_time_ratio"]:
+                out[key] = format_float(out[key], 2)
+            elif key in ["best_abs_error", "best_rel_error"]:
+                out[key] = f"{out[key]:.3e}"
+            else:
+                out[key] = format_float(out[key], 2)
+
+    return out
+
+
+def format_problem_size_record(r: dict[str, Any]) -> dict[str, Any]:
+    out = dict(r)
+
+    out["n"] = f"{int(out['n']):,}"
+
+    for key in [
+        "single_vector_size_MiB",
+        "cpu_time_ms",
+        "cpu_bw_GB_s",
+        "kernel_time_ms",
+        "h2d_time_ms",
+        "d2h_time_ms",
+        "cpu_finalize_time_ms",
+        "post_h2d_time_ms",
+        "e2e_time_ms",
+        "post_h2d_bw_GB_s",
+        "e2e_bw_GB_s",
+        "post_h2d_gflops",
+        "e2e_gflops",
+        "post_h2d_speedup",
+        "e2e_speedup",
+    ]:
+        if isinstance(out.get(key), (int, float)):
+            if key.endswith("_speedup"):
+                out[key] = format_speedup(out[key])
+            elif key in ["single_vector_size_MiB"]:
+                out[key] = format_float(out[key], 2)
+            else:
+                out[key] = format_float(out[key], 3)
+
+    return out
+
+
+def format_problem_size_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    out = dict(summary)
+
+    out["small"] = format_problem_size_record(summary["small"])
+    out["large"] = format_problem_size_record(summary["large"])
+    out["best_e2e"] = format_problem_size_record(summary["best_e2e"])
+    out["best_post_h2d"] = format_problem_size_record(summary["best_post_h2d"])
+
+    out["post_h2d_speedup_growth"] = format_float(summary["post_h2d_speedup_growth"], 2)
+    out["e2e_speedup_growth"] = format_float(summary["e2e_speedup_growth"], 2)
+
+    return out
+
+
+def build_report_context(
+    df: pd.DataFrame,
+    config: BenchmarkReportConfig,
+) -> dict[str, Any]:
+    df_gpu = get_gpu_rows(df)
+    large_n = config.large_n
+
+    tables_markdown = render_markdown_tables_to_string(df, config)
+
+    records = build_main_summary_records(
+        df=df,
+        df_gpu=df_gpu,
+        large_n=large_n,
+    )
+
+    if not records:
+        raise RuntimeError("No summary records were generated.")
+
+    cpu_record = next(r for r in records if r["version"] == "cpu_serial")
+    cpu_formatted = format_summary_record(cpu_record)
+    cpu_formatted["time_ms"] = cpu_formatted["post_h2d_time_ms"]
+
+    gpu_records = [r for r in records if r["version"] != "cpu_serial"]
+
+    if not gpu_records:
+        raise RuntimeError("No GPU records were generated.")
+
+    best_post_h2d = min(gpu_records, key=lambda r: r["post_h2d_time_ms"])
+    best_post_h2d_formatted = format_summary_record(best_post_h2d)
+
+    best_e2e = min(gpu_records, key=lambda r: r["e2e_time_ms"])
+    best_e2e_formatted = format_summary_record(best_e2e)
+    h2d_fraction = (
+        float(best_e2e["h2d_time_ms"]) / float(best_e2e["e2e_time_ms"]) * 100.0
+    )
+    best_e2e_formatted["h2d_fraction_percent"] = format_float(h2d_fraction, 1)
+
+    formatted_records = [format_summary_record(r) for r in records]
+
+    versions = {r["version"]: format_summary_record(r) for r in records}
+
+    block_sweep_summaries_raw = build_block_sweep_summaries(
+        df=df,
+        large_n=large_n,
+    )
+
+    problem_size_summaries_raw = build_problem_size_summaries(
+        df=df,
+        df_gpu=df_gpu,
+    )
+
+    block_sweep_summaries = [
+        format_block_sweep_summary(r) for r in block_sweep_summaries_raw
+    ]
+
+    problem_size_summaries = [
+        format_problem_size_summary(r) for r in problem_size_summaries_raw
+    ]
+
+    dtype = df.iloc[0]["dtype"]
+    size_of_dtype = int(df.iloc[0]["size_of_dtype"])
+    single_vector_size_mib = large_n * size_of_dtype / (1 << 20)
+
+    context = {
+        "csv_path": str(config.csv_path),
+        "md_table_out_path": str(config.md_table_rel_path),
+        "csv_rel_path": str(config.csv_rel_path),
+        "large_n": large_n,
+        "large_n_formatted": f"{large_n:,}",
+        "dtype": dtype,
+        "size_of_dtype": size_of_dtype,
+        "single_vector_size_mib": format_float(single_vector_size_mib, 2),
+        "cpu": cpu_formatted,
+        "best_post_h2d": best_post_h2d_formatted,
+        "best_e2e": best_e2e_formatted,
+        "records": formatted_records,
+        "versions": versions,
+        "block_sweep_summaries": block_sweep_summaries,
+        "problem_size_summaries": problem_size_summaries,
+        "tables_markdown": tables_markdown,
+    }
+
+    return context
+
+
+def render_report(
+    df: pd.DataFrame,
+    config: BenchmarkReportConfig,
+) -> None:
+    context = build_report_context(df, config)
+
+    # Using Jinja2
+    env = Environment(
+        loader=FileSystemLoader(config.template_dir),
+        autoescape=False,
+    )
+
+    template = env.get_template(config.template_name)
+    rendered = template.render(**context)
+
+    config.report_out_path.parent.mkdir(parents=True, exist_ok=True)
+    config.report_out_path.write_text(rendered)
+
+    print(f"Wrote {config.report_out_path}")
+
+
 def main() -> None:
-    config = BenchmarkTableConfig()
+    config = BenchmarkReportConfig()
 
     df = read_benchmark_csv(config.csv_path)
 
+    # 1. Write standalone generated tables
     write_markdown_tables(
         df=df,
         config=config,
     )
 
     print(f"Wrote {config.out_path}")
+
+    # 2. Write full analysis report from Jinja2 template
+    render_report(
+        df=df,
+        config=config,
+    )
 
 
 if __name__ == "__main__":
