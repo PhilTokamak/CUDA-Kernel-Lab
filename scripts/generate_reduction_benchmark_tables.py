@@ -13,6 +13,7 @@ class BenchmarkTableConfig:
     out_path: Path = Path("results/markdown_tables/reduction_bench_tables.md")
     kernel_name: str = "Reduction"
     large_n: int = 1 << 24
+    main_input_pattern: str = "ones"
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,9 @@ def format_speedup(value: Any) -> str:
 
 def read_benchmark_csv(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
+
+    if "input_pattern" not in df.columns:
+        df["input_pattern"] = "ones"
 
     for col in FLOAT_COLUMNS:
         if col in df.columns:
@@ -651,6 +655,7 @@ def write_main_benchmark_section(
     f.write(f"N = {large_n:,}\n\n")
     f.write(f"DType = {df.iloc[0]['dtype']}\n\n")
     f.write(f"Size of dtype = {df.iloc[0]['size_of_dtype']} bytes\n\n")
+    f.write(f"Input pattern: {df["input_pattern"].iloc[0]}\n\n")
 
     single_vector_size_MiB = large_n * df.iloc[0]["size_of_dtype"] / (1 << 20)
     f.write(f"Single vector size = {format_float(single_vector_size_MiB, 2)} MiB\n\n")
@@ -680,6 +685,7 @@ def write_block_size_sweep_section(
 
     f.write(f"DType = {block_sweep.iloc[0]['dtype']}\n\n")
     f.write(f"Size of dtype = {df.iloc[0]['size_of_dtype']} bytes\n\n")
+    f.write(f"Input pattern: {df["input_pattern"].iloc[0]}\n\n")
 
     cpu_rows = get_cpu_rows_at_n(df, large_n)
     cpu_ref_time = cpu_rows.loc[cpu_rows["version"] == "cpu_serial", "avg_ms"].iloc[0]
@@ -710,6 +716,7 @@ def write_problem_size_sweep_section(
     f.write("## Problem Size Sweep\n\n")
     f.write(f"DType = {df.iloc[0]['dtype']}\n\n")
     f.write(f"Size of dtype = {df.iloc[0]['size_of_dtype']} bytes\n\n")
+    f.write(f"Input pattern: {df["input_pattern"].iloc[0]}\n\n")
 
     for i_th_version, version in enumerate(get_kernel_versions(df_gpu), start=1):
         f.write(f"{i_th_version}. Version = {version}\n\n")
@@ -916,9 +923,9 @@ def build_block_sweep_summaries(
         slowest = rows.iloc[-1]
 
         min_time = float(best["avg_ms"])
-        best_block_size = float(best["block_size"])
+        best_block_size = int(best["block_size"])
         max_time = float(slowest["avg_ms"])
-        slowest_block_size = float(slowest["block_size"])
+        slowest_block_size = int(slowest["block_size"])
 
         time_ratio = max_time / min_time if min_time > 0 else float("nan")
 
@@ -1107,6 +1114,58 @@ def format_problem_size_summary(summary: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def build_correctness_failures_from_df(df: pd.DataFrame) -> list[dict[str, Any]]:
+    if "correct" not in df.columns:
+        return []
+
+    bad = df.loc[~df["correct"]].copy()
+
+    failures: list[dict[str, Any]] = []
+
+    for _, row in bad.iterrows():
+        if row.get("mode") == "cuda_kernel":
+            failures.append(
+                {
+                    "source": "csv",
+                    "version": row.get("version", "N/A"),
+                    "mode": row.get("mode", "N/A"),
+                    "n": f"{int(row['n']):,}" if "n" in row and pd.notna(row["n"]) else "N/A",
+                    "block_size": (
+                        int(row["block_size"])
+                        if "block_size" in row and pd.notna(row["block_size"])
+                        else "N/A"
+                    ),
+                    "grid_size": (
+                        int(row["grid_size"])
+                        if "grid_size" in row and pd.notna(row["grid_size"])
+                        else "N/A"
+                    ),
+                    "result": (
+                        f"{float(row['result']):.6g}"
+                        if "result" in row and pd.notna(row["result"])
+                        else "N/A"
+                    ),
+                    "ref": (
+                        f"{float(row['ref']):.6g}"
+                        if "ref" in row and pd.notna(row["ref"])
+                        else "N/A"
+                    ),
+                    "abs_error": (
+                        f"{float(row['abs_error']):.6g}"
+                        if "abs_error" in row and pd.notna(row["abs_error"])
+                        else "N/A"
+                    ),
+                    "rel_error": (
+                        f"{float(row['rel_error']):.6g}"
+                        if "rel_error" in row and pd.notna(row["rel_error"])
+                        else "N/A"
+                    ),
+                }
+            )
+
+    return failures
+
+
 def build_report_context(
     df: pd.DataFrame,
     config: BenchmarkReportConfig,
@@ -1170,6 +1229,10 @@ def build_report_context(
     size_of_dtype = int(df.iloc[0]["size_of_dtype"])
     single_vector_size_mib = large_n * size_of_dtype / (1 << 20)
 
+    main_input_pattern = config.main_input_pattern
+
+    correctness_failures = build_correctness_failures_from_df(df)
+
     context = {
         "csv_path": str(config.csv_path),
         "md_table_out_path": str(config.md_table_rel_path),
@@ -1179,6 +1242,7 @@ def build_report_context(
         "dtype": dtype,
         "size_of_dtype": size_of_dtype,
         "single_vector_size_mib": format_float(single_vector_size_mib, 2),
+        "input_pattern": main_input_pattern,
         "cpu": cpu_formatted,
         "best_post_h2d": best_post_h2d_formatted,
         "best_e2e": best_e2e_formatted,
@@ -1186,6 +1250,7 @@ def build_report_context(
         "versions": versions,
         "block_sweep_summaries": block_sweep_summaries,
         "problem_size_summaries": problem_size_summaries,
+        "correctness_failures": correctness_failures,
         "tables_markdown": tables_markdown,
     }
 
