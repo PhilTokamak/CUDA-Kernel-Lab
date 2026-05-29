@@ -169,8 +169,13 @@ ReductionResult bench_reduction_cpu(const float* x_host, size_t n, int repeat, C
 
     r.time_stats = benchmark_cpu([&]() { reduce_cpu(x_host, r.result, n); }, repeat, cpu_timer);
 
+    // use `double` version to calculate reference value to avoid stucking at the largest continuous
+    // integer `1 << 24` for `fp32` data type
+    double ref{};
+    reduce_cpu_fp64_ref(x_host, ref, n);
+
     r.bytes   = num_bytes_reduction(n, 0);
-    r.ref     = r.result;
+    r.ref     = static_cast<float>(ref);
     r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
     r.gflops  = calculate_gflops(num_flop_reduction(n), r.time_stats.avg_ms);
 
@@ -435,6 +440,51 @@ void run_grid_stride_block_shared_benchmark(std::ofstream& out, const BenchmarkC
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
+void run_grid_stride_two_pass_benchmark(std::ofstream& out, const BenchmarkConfig& config,
+                                        float* x_dev, float* final_gpu_sum_host, size_t n,
+                                        int block_size, float ref, CudaTimer& cuda_timer,
+                                        CpuTimer& cpu_timer)
+{
+    // Benchmark grid-stride-loop block-shared memory version
+    const std::string version = "cuda_grid_stride_two_pass";
+
+    int num_sms                       = gpu::get_num_sms();
+    int grid_size_grid_stride_version = 4 * num_sms;
+    int interm_stage_elems            = grid_size_grid_stride_version;
+
+    // Allocate interm stage (partial sum) device memory
+    DeviceBuffer<float> partial_sum_dev(interm_stage_elems);
+    DeviceBuffer<float> final_sum_dev(1);
+
+    ReductionResult result_kernel = bench_reduction_kernel_only(
+        config.kernel, version, "cuda_kernel", n, block_size, grid_size_grid_stride_version,
+        interm_stage_elems, config.repeat_kernel, ref,
+        [&]()
+        {
+            launch_reduce_grid_stride_two_pass(x_dev, partial_sum_dev.get(), final_sum_dev.get(), n,
+                                               block_size, grid_size_grid_stride_version);
+        },
+        [&]() -> float
+        {
+            gpu::cuda_check(cudaMemcpy(final_gpu_sum_host, final_sum_dev.get(), 1 * sizeof(float),
+                                       cudaMemcpyDefault));
+
+            return final_gpu_sum_host[0];
+        },
+        cuda_timer);
+
+    write_csv_row(out, result_kernel);
+
+    // benchmark d2h
+    ReductionResult result_d2h = bench_reduction_d2h(
+        config.kernel, version, "d2h", n, block_size, grid_size_grid_stride_version, 1,
+        final_sum_dev.get(), final_gpu_sum_host, config.repeat_copy, cpu_timer);
+
+    write_csv_row(out, result_d2h);
+
+    // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
 void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, float* x_dev,
                           float* final_gpu_sum_host, size_t n, float ref, CudaTimer& cuda_timer,
                           CpuTimer& cpu_timer)
@@ -450,6 +500,9 @@ void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, flo
 
         run_grid_stride_block_shared_benchmark(out, config, x_dev, final_gpu_sum_host, n,
                                                block_size, ref, cuda_timer, cpu_timer);
+
+        run_grid_stride_two_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size,
+                                           ref, cuda_timer, cpu_timer);
     }
 }
 
@@ -473,7 +526,7 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
 
     write_csv_row(out, result_cpu);
 
-    float ref = result_cpu.result;
+    float ref = result_cpu.ref;
 
     // Allocate device memory
     DeviceBuffer<float> x_dev(n);
