@@ -1,5 +1,6 @@
 #include "cuda_utils.cuh"
 #include "reduction.hpp"
+#include <bit>
 #include <cuda/cmath>
 
 void reduce_cpu(const float* x, float& out, size_t n)
@@ -8,6 +9,15 @@ void reduce_cpu(const float* x, float& out, size_t n)
     for (size_t i = 0; i < n; ++i)
     {
         out += x[i];
+    }
+}
+
+void reduce_cpu_fp64_ref(const float* x, double& out, size_t n)
+{
+    out = double{};
+    for (size_t i = 0; i < n; ++i)
+    {
+        out += static_cast<double>(x[i]);
     }
 }
 
@@ -108,12 +118,13 @@ __global__ void reduce_grid_stride_block_kernel(const float* input, float* parti
 {
     extern __shared__ float local_array[];
 
-    unsigned int tid = threadIdx.x;
+    size_t tid = static_cast<size_t>(threadIdx.x);
 
-    unsigned int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    size_t idx = static_cast<size_t>(threadIdx.x) +
+                 static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x);
 
     float val{};
-    unsigned int grid_stride = gridDim.x * blockDim.x;
+    size_t grid_stride = static_cast<size_t>(gridDim.x) * static_cast<size_t>(blockDim.x);
 
     // Grid-stride loop
     for (size_t i = idx; i < n; i += grid_stride)
@@ -157,6 +168,81 @@ void launch_reduce_grid_stride_block(const float* x_dev, float* partial_sum_dev,
 
     reduce_grid_stride_block_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev,
                                                                              n);
+
+    gpu::cuda_check_last();
+}
+
+/**
+ * Grid-stride two-pass version
+ */
+__global__ void reduce_grid_stride_two_pass_kernel(const float* input_partial_sum, float* out,
+                                                   size_t n)
+{
+    extern __shared__ float local_array[];
+
+    unsigned int tid = threadIdx.x;
+
+    // Put all elements of partial sum into local array in one block and synchronize block threads
+    if (tid < n)
+    {
+        local_array[tid] = input_partial_sum[tid];
+    }
+    else
+    {
+        local_array[tid] = 0.0f;
+    }
+
+    // Synchronize all threads in the block
+    __syncthreads();
+
+    // block reduction
+    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            local_array[tid] += local_array[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    // Result is now in local_array[0]
+    if (tid == 0)
+    {
+        out[0] = local_array[0];
+    }
+}
+
+/**
+ * @brief Launch grid-stride two pass reduction kernel
+ *
+ * @param[in] x_dev            Input array to reduce
+ * @param[in] partial_sum_dev  Allocated memory for partial sum array from GPU kernel
+ * @param[out] out_dev         Final sum from GPU kernel
+ * @param[in] n                Length of input array
+ */
+void launch_reduce_grid_stride_two_pass(const float* x_dev, float* partial_sum_dev, float* out_dev,
+                                        size_t n, int block_size, int grid_size)
+{
+    // int blocks = cuda::ceil_div(n, block_size);
+    // Calculate shared bytes for specifying the size of block-shared memory
+    size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
+
+    reduce_grid_stride_block_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev,
+                                                                             n);
+
+    gpu::cuda_check_last();
+
+    size_t second_pass_block_size     = std::bit_ceil(static_cast<size_t>(grid_size));
+    size_t shared_bytes_second_pass   = static_cast<size_t>(second_pass_block_size) * sizeof(float);
+    size_t num_elem_input_second_pass = grid_size;
+
+
+    // In CUDA, the absolute maximum number of threads in a single block is 1024. This limit is
+    // enforced by the hardware.
+    assert(second_pass_block_size <= 1024);
+
+    reduce_grid_stride_two_pass_kernel<<<1, second_pass_block_size, shared_bytes_second_pass>>>(
+        partial_sum_dev, out_dev, num_elem_input_second_pass);
 
     gpu::cuda_check_last();
 }
