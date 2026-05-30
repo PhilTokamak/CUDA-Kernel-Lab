@@ -47,8 +47,8 @@ struct BenchmarkConfig
     std::filesystem::path output_csv{"results/data/reduction.csv"};
 
     // Vector size to sweep
-    std::vector<size_t> sizes_vec{1 << 18, 1 << 19, 1 << 20, 1 << 21, 1 << 22,
-                                  1 << 23, 1 << 24, 1 << 25, 1 << 26, 1 << 27};
+    std::vector<size_t> sizes_vec{1 << 18, 1 << 19, 1 << 20, 1 << 21, 1 << 22, 1 << 23,
+                                  1 << 24, 1 << 25, 1 << 26, 1 << 27, 1 << 28};
 
     // GPU block size to sweep
     std::vector<int> block_sizes{64, 128, 256, 512, 1024};
@@ -161,7 +161,8 @@ void write_csv_row(std::ofstream& out, const ReductionResult& r)
                r.result, r.ref, r.abs_error, r.rel_error, (r.correct ? "true" : "false"));
 }
 
-ReductionResult bench_reduction_cpu(const float* x_host, size_t n, int repeat, CpuTimer& cpu_timer)
+ReductionResult bench_reduction_cpu_serial(const float* x_host, size_t n, int repeat,
+                                           CpuTimer& cpu_timer)
 {
     ReductionResult r = make_reduction_result("reduction", "cpu_serial", "cpu", FP32_DTYPE, n, 0, 0,
                                               0, // no intermediate stage
@@ -182,6 +183,25 @@ ReductionResult bench_reduction_cpu(const float* x_host, size_t n, int repeat, C
     r.abs_error = 0.0;
     r.rel_error = 0.0;
     r.correct   = true;
+
+    return r;
+}
+
+ReductionResult bench_reduction_cpu_omp(const float* x_host, size_t n, int repeat, float ref,
+                                        CpuTimer& cpu_timer)
+{
+    ReductionResult r = make_reduction_result("reduction", "cpu_omp", "cpu", FP32_DTYPE, n, 0, 0,
+                                              0, // no intermediate stage
+                                              repeat);
+
+    r.time_stats = benchmark_cpu([&]() { reduce_cpu_omp(x_host, r.result, n); }, repeat, cpu_timer);
+
+    r.bytes   = num_bytes_reduction(n, 0);
+    r.ref     = ref;
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+    r.gflops  = calculate_gflops(num_flop_reduction(n), r.time_stats.avg_ms);
+
+    calc_error(r);
 
     return r;
 }
@@ -302,9 +322,11 @@ void run_atomic_add_benchmark(std::ofstream& out, const BenchmarkConfig& config,
 
     DeviceBuffer<float> final_gpu_sum_dev(1);
 
+    // For AtomicAdd, since it's too slow, only repeat 3 times
+    int repeat_atomic             = 3;
     ReductionResult result_atomic = bench_reduction_kernel_only(
-        config.kernel, version, "cuda_kernel", n, block_size, grid_size_atomic, 1,
-        config.repeat_kernel, ref,
+        config.kernel, version, "cuda_kernel", n, block_size, grid_size_atomic, 1, repeat_atomic,
+        ref,
         [&]()
         {
             // IMPORTANT: before launching this kernel, set value output array to zero
@@ -485,6 +507,52 @@ void run_grid_stride_two_pass_benchmark(std::ofstream& out, const BenchmarkConfi
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
+void run_multi_pass_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* x_dev,
+                              float* final_gpu_sum_host, size_t n, int block_size, float ref,
+                              CudaTimer& cuda_timer, CpuTimer& cpu_timer)
+{
+    // Benchmark grid-stride-loop block-shared memory version
+    const std::string version = "cuda_multi_pass";
+
+    int num_sms                       = gpu::get_num_sms();
+    int grid_size_grid_stride_version = 4 * num_sms;
+    int interm_stage_elems            = grid_size_grid_stride_version;
+
+    // Allocate interm stage (partial sum) device memory
+    DeviceBuffer<float> partial_sum_dev(interm_stage_elems);
+    DeviceBuffer<float> scratch_dev(interm_stage_elems);
+    DeviceBuffer<float> final_sum_dev(1);
+
+    ReductionResult result_kernel = bench_reduction_kernel_only(
+        config.kernel, version, "cuda_kernel", n, block_size, grid_size_grid_stride_version,
+        interm_stage_elems, config.repeat_kernel, ref,
+        [&]()
+        {
+            launch_reduce_multi_pass(x_dev, partial_sum_dev.get(), scratch_dev.get(),
+                                     final_sum_dev.get(), n, block_size,
+                                     grid_size_grid_stride_version);
+        },
+        [&]() -> float
+        {
+            gpu::cuda_check(cudaMemcpy(final_gpu_sum_host, final_sum_dev.get(), 1 * sizeof(float),
+                                       cudaMemcpyDefault));
+
+            return final_gpu_sum_host[0];
+        },
+        cuda_timer);
+
+    write_csv_row(out, result_kernel);
+
+    // benchmark d2h
+    ReductionResult result_d2h = bench_reduction_d2h(
+        config.kernel, version, "d2h", n, block_size, grid_size_grid_stride_version, 1,
+        final_sum_dev.get(), final_gpu_sum_host, config.repeat_copy, cpu_timer);
+
+    write_csv_row(out, result_d2h);
+
+    // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
 void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, float* x_dev,
                           float* final_gpu_sum_host, size_t n, float ref, CudaTimer& cuda_timer,
                           CpuTimer& cpu_timer)
@@ -503,6 +571,9 @@ void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, flo
 
         run_grid_stride_two_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size,
                                            ref, cuda_timer, cpu_timer);
+
+        run_multi_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size, ref,
+                                 cuda_timer, cpu_timer);
     }
 }
 
@@ -521,12 +592,19 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     // Initialize vectors on the host
     init_array(x_host.get(), n);
 
-    // CPU benchmark
-    ReductionResult result_cpu = bench_reduction_cpu(x_host.get(), n, config.repeat_cpu, cpu_timer);
+    // CPU serial benchmark
+    ReductionResult result_cpu_serial =
+        bench_reduction_cpu_serial(x_host.get(), n, config.repeat_cpu, cpu_timer);
 
-    write_csv_row(out, result_cpu);
+    write_csv_row(out, result_cpu_serial);
 
-    float ref = result_cpu.ref;
+    float ref = result_cpu_serial.ref;
+
+    // CPU OMP benchmark
+    ReductionResult result_cpu_omp =
+        bench_reduction_cpu_omp(x_host.get(), n, config.repeat_cpu, ref, cpu_timer);
+
+    write_csv_row(out, result_cpu_omp);
 
     // Allocate device memory
     DeviceBuffer<float> x_dev(n);
