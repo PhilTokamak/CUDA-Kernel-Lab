@@ -51,7 +51,7 @@ struct BenchmarkConfig
                                   1 << 24, 1 << 25, 1 << 26, 1 << 27, 1 << 28};
 
     // GPU block size to sweep
-    std::vector<int> block_sizes{64, 128, 256, 512, 1024};
+    std::vector<int> block_sizes{256};
 
     // Number of measurement repetitions
     int repeat_cpu          = 10;
@@ -405,6 +405,61 @@ void run_block_shared_mem_benchmark(std::ofstream& out, const BenchmarkConfig& c
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
+void run_block_shared_mem_unified_mem_benchmark(size_t n, int block_size, CpuTimer& cpu_timer)
+{
+    // Benchmark block shared memory version
+    const std::string version = "cuda_block_shared_mem";
+
+    int grid_size_block_version = static_cast<int>((n + block_size - 1) / block_size);
+    int interm_stage_elems      = grid_size_block_version;
+
+    // Allocate interm stage (partial sum) host array memory
+    float* x           = nullptr;
+    float* partial_sum = nullptr;
+    float* final_sum   = nullptr;
+
+    gpu::cuda_check(cudaMallocManaged(&x, n * sizeof(float)));
+    gpu::cuda_check(cudaMallocManaged(&partial_sum, interm_stage_elems * sizeof(float)));
+    gpu::cuda_check(cudaMallocManaged(&final_sum, 1 * sizeof(float)));
+
+    init_array(x, n);
+
+    int device = 0;
+    gpu::cuda_check(cudaGetDevice(&device));
+
+    cudaMemLocation location{};
+    location.type = cudaMemLocationTypeDevice;
+    location.id   = device;
+
+    cudaMemLocation location_back_to_cpu{};
+    location_back_to_cpu.type = cudaMemLocationTypeHost;
+    location_back_to_cpu.id   = 0;
+
+    gpu::cuda_check(cudaMemPrefetchAsync(x, n * sizeof(float), location, 0, 0));
+    gpu::cuda_check(cudaDeviceSynchronize());
+
+    cpu_timer.start();
+
+    launch_reduce_block(x, partial_sum, n, block_size);
+    gpu::cuda_check(cudaDeviceSynchronize());
+
+    gpu::cuda_check(cudaMemPrefetchAsync(partial_sum, interm_stage_elems * sizeof(float),
+                                         location_back_to_cpu, 0, 0));
+    gpu::cuda_check(cudaDeviceSynchronize());
+
+    // CPU read partial_sum; this may trigger GPU->CPU migration.
+    reduce_cpu(partial_sum, final_sum[0], interm_stage_elems);
+
+    double ms = cpu_timer.stop();
+
+    fmt::print("unified memory benchmark for n = {} with result {} is: {} ms\n", n, final_sum[0],
+               ms);
+
+    cudaFree(x);
+    cudaFree(partial_sum);
+    cudaFree(final_sum);
+}
+
 void run_grid_stride_block_shared_benchmark(std::ofstream& out, const BenchmarkConfig& config,
                                             float* x_dev, float* final_gpu_sum_host, size_t n,
                                             int block_size, float ref, CudaTimer& cuda_timer,
@@ -574,6 +629,8 @@ void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, flo
 
         run_multi_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size, ref,
                                  cuda_timer, cpu_timer);
+
+        run_block_shared_mem_unified_mem_benchmark(n, block_size, cpu_timer);
     }
 }
 
