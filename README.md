@@ -51,3 +51,7 @@ Alternatively, after configuration, you can build directly with Ninja from the b
 cd build/release
 ninja
 ```
+
+## License
+
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
