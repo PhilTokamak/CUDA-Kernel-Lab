@@ -9,6 +9,12 @@ project(cuda_kernel_lab
 # =====================================
 find_package(fmt REQUIRED)
 
+find_package(OpenMP REQUIRED)
+if (OpenMP_CXX_FOUND)
+    message(STATUS "Found OpenMP")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
+
 # =====================================
 # Library
 # =====================================
@@ -35,6 +41,13 @@ target_link_libraries(
     cuda_kernels
     PUBLIC
     fmt::fmt
+    OpenMP::OpenMP_CXX
+)
+
+target_compile_options(
+    cuda_kernels
+    PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>
 )
 
 # =====================================
