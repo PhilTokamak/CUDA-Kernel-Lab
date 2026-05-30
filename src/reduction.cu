@@ -2,6 +2,7 @@
 #include "reduction.hpp"
 #include <bit>
 #include <cuda/cmath>
+#include <omp.h>
 
 void reduce_cpu(const float* x, float& out, size_t n)
 {
@@ -10,6 +11,20 @@ void reduce_cpu(const float* x, float& out, size_t n)
     {
         out += x[i];
     }
+}
+
+void reduce_cpu_omp(const float* x, float& out, size_t n)
+{
+    // create a double res variable to avoid that the largest continuous integer fp32 can represent
+    // is 1 << 24
+    double res = float{};
+#pragma omp parallel for reduction(+ : res)
+    for (size_t i = 0; i < n; ++i)
+    {
+        res += x[i];
+    }
+
+    out = res;
 }
 
 void reduce_cpu_fp64_ref(const float* x, double& out, size_t n)
@@ -245,4 +260,59 @@ void launch_reduce_grid_stride_two_pass(const float* x_dev, float* partial_sum_d
         partial_sum_dev, out_dev, num_elem_input_second_pass);
 
     gpu::cuda_check_last();
+}
+
+/**
+ * @brief Launch multi-pass reduction kernel
+ *
+ * @param[in] x_dev            Input array to reduce
+ * @param[in] partial_sum_dev  Allocated memory for partial sum array from GPU kernel
+ * @param[in] scratch_dev      Allocated memory for multi pass in GPU
+ * @param[out] out_dev         Final sum from GPU kernel
+ * @param[in] n                Length of input array
+ */
+void launch_reduce_multi_pass(const float* x_dev, float* partial_sum_dev, float* scratch_dev,
+                              float* out_dev, size_t n, int block_size, int grid_size)
+{
+    size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
+
+    // pass 1 - original array might be very large, use grid-stride version to reduce number of
+    // threads
+    reduce_grid_stride_block_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev,
+                                                                             n);
+
+    gpu::cuda_check_last();
+
+    size_t current_n = static_cast<size_t>(grid_size);
+
+    float* current_in  = partial_sum_dev;
+    float* current_out = scratch_dev;
+
+    while (current_n > 1)
+    {
+        // pass 2, 3, ...
+        size_t pass_block_size =
+            1024; // Absolute maximum number of threads in a single block is 1024
+        if (current_n < pass_block_size)
+        {
+            pass_block_size = std::bit_ceil(current_n);
+        }
+
+        int pass_grid_size = static_cast<int>(cuda::ceil_div(current_n, pass_block_size));
+
+        // Unlike for grid stride reduction, now the shared array length must not be smaller than
+        // block_size, since the whole partial sum array is handled by one block
+        size_t pass_shared_bytes = pass_block_size * sizeof(float);
+
+        reduce_block_kernel<<<pass_grid_size, static_cast<int>(pass_block_size),
+                              pass_shared_bytes>>>(current_in, current_out, current_n);
+
+        gpu::cuda_check_last();
+
+        current_n = static_cast<size_t>(pass_grid_size);
+
+        std::swap(current_in, current_out);
+    }
+
+    gpu::cuda_check(cudaMemcpy(out_dev, current_in, sizeof(float), cudaMemcpyDeviceToDevice));
 }
