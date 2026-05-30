@@ -51,7 +51,7 @@ struct BenchmarkConfig
                                   1 << 24, 1 << 25, 1 << 26, 1 << 27, 1 << 28};
 
     // GPU block size to sweep
-    std::vector<int> block_sizes{256};
+    std::vector<int> block_sizes{64, 128, 256, 512, 1024};
 
     // Number of measurement repetitions
     int repeat_cpu          = 10;
@@ -629,8 +629,6 @@ void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, flo
 
         run_multi_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size, ref,
                                  cuda_timer, cpu_timer);
-
-        run_block_shared_mem_unified_mem_benchmark(n, block_size, cpu_timer);
     }
 }
 
