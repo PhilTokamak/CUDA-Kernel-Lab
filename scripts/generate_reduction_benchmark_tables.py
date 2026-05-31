@@ -14,7 +14,7 @@ class BenchmarkTableConfig:
     csv_path: Path = Path("results/data/reduction.csv")
     out_path: Path = Path("results/markdown_tables/reduction_bench_tables.md")
     kernel_name: str = "Reduction"
-    large_n: int = 1 << 24
+    large_n: int = 1 << 26
     main_input_pattern: str = "ones"
 
 
@@ -231,7 +231,7 @@ def get_block_sweep_rows(df: pd.DataFrame, large_n: int) -> pd.DataFrame:
 def get_kernel_versions(df_gpu: pd.DataFrame) -> list[str]:
     if df_gpu.empty:
         return []
-    versions = sorted(df_gpu.loc[df_gpu["mode"] == "cuda_kernel", "version"].unique())
+    versions = df_gpu.loc[df_gpu["mode"] == "cuda_kernel", "version"].unique()
     return list(versions)
 
 
@@ -529,7 +529,7 @@ def build_problem_size_numeric_records_for_version(
     gpu_version_rows = df_gpu.loc[df_gpu["version"] == version].copy()
     records: list[dict[str, Any]] = []
 
-    for n in sorted(gpu_version_rows["n"].unique()):
+    for n in gpu_version_rows["n"].unique():
         cpu_serial_n = get_cpu_serial_rows_at_n(df, int(n))
         if cpu_serial_n.empty:
             continue
@@ -559,7 +559,7 @@ def build_problem_size_numeric_records_for_cpu_optimized_version(
 
     records: list[dict[str, Any]] = []
 
-    for n in sorted(cpu_version_rows["n"].unique()):
+    for n in cpu_version_rows["n"].unique():
         record = build_cpu_optimized_numeric_record(
             df=df,
             cpu_version_rows=cpu_version_rows,
@@ -791,7 +791,7 @@ def write_block_size_sweep_section(
     )
 
     for i_th_version, version in enumerate(
-        sorted(block_sweep["version"].unique()),
+        block_sweep["version"].unique(),
         start=1,
     ):
         f.write(f"{i_th_version}. Version = {version}\n\n")
@@ -898,7 +898,7 @@ def build_block_sweep_summaries(
     if block_sweep.empty:
         return summaries
 
-    for version in sorted(block_sweep["version"].unique()):
+    for version in block_sweep["version"].unique():
         rows = block_sweep.loc[block_sweep["version"] == version].copy()
 
         if rows.empty:
