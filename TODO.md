@@ -9,7 +9,7 @@ Goal: implement and benchmark several CUDA reduction strategies
 - [x] Implement CUDA block-level shared memory
 - [x] grid-stride loop
 - [x] Add OpenMP CPU baseline
-- [ ] wrap unroll
+- [x] wrap shuffle reduction
 - [x] Add correctness check with absolute and relative error
 - [x] Add benchmark sweep over `n`
 - [x] Add benchmark sweep over block size
