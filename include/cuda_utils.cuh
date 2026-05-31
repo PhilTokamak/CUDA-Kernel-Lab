@@ -180,3 +180,14 @@ template <typename T> class DeviceBuffer
     T* _ptr{nullptr};
     size_t _count{0};
 };
+
+__device__ __forceinline__ float warp_reduce_sum(float val)
+{
+    val += __shfl_down_sync(0xffffffff, val, 16);
+    val += __shfl_down_sync(0xffffffff, val, 8);
+    val += __shfl_down_sync(0xffffffff, val, 4);
+    val += __shfl_down_sync(0xffffffff, val, 2);
+    val += __shfl_down_sync(0xffffffff, val, 1);
+
+    return val;
+}

@@ -9,3 +9,5 @@ void launch_reduce_grid_stride_two_pass(const float* x_dev, float* partial_sum_d
                                         size_t n, int block_size, int grid_size);
 void launch_reduce_multi_pass(const float* x_dev, float* partial_sum_dev, float* scratch_dev,
                               float* out_dev, size_t n, int block_size, int grid_size);
+void launch_reduce_warp_shuffle(const float* x_dev, float* partial_sum_dev, size_t n,
+                                int block_size, int grid_size);

@@ -75,7 +75,7 @@ __global__ void reduce_block_kernel(const float* input, float* partial_sum_out, 
     // the third param in the triple chavron <<<grid_size, block_size, smem_size_in_bytes>>>
     extern __shared__ float local_array[];
 
-    size_t tid = static_cast<size_t>(threadIdx.x);
+    unsigned int tid = threadIdx.x;
 
     size_t idx = static_cast<size_t>(threadIdx.x) +
                  static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x);
@@ -133,7 +133,7 @@ __global__ void reduce_grid_stride_block_kernel(const float* input, float* parti
 {
     extern __shared__ float local_array[];
 
-    size_t tid = static_cast<size_t>(threadIdx.x);
+    unsigned int tid = threadIdx.x;
 
     size_t idx = static_cast<size_t>(threadIdx.x) +
                  static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x);
@@ -188,6 +188,83 @@ void launch_reduce_grid_stride_block(const float* x_dev, float* partial_sum_dev,
 }
 
 /**
+ * Grid-stride loop + shared-memory block reduction
+ * with warp-level final reduction.
+ *
+ * Assumptions:
+ *   - blockDim.x is a power of two.
+ *   - blockDim.x >= 64.
+ */
+__global__ void reduce_warp_shuffle_kernel(const float* input, float* partial_sum_out, size_t n)
+{
+    extern __shared__ float local_array[];
+
+    unsigned int tid = threadIdx.x;
+
+    size_t idx = static_cast<size_t>(threadIdx.x) +
+                 static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x);
+
+    float val{};
+    size_t grid_stride = static_cast<size_t>(gridDim.x) * static_cast<size_t>(blockDim.x);
+
+    // Grid-stride loop
+    for (size_t i = idx; i < n; i += grid_stride)
+    {
+        val += input[i];
+    }
+
+    // Put partial sum of each thread into local array and synchronize block threads
+    local_array[tid] = val;
+    // Synchronize all threads in the block
+    __syncthreads();
+
+    // block reduction
+    for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1)
+    {
+        if (tid < stride)
+        {
+            local_array[tid] += local_array[tid + stride];
+        }
+        __syncthreads();
+    }
+
+    if (tid < 32)
+    {
+        float warp_val = local_array[tid];
+        warp_val += local_array[tid + 32];
+
+        // Warp unroll
+        warp_val = warp_reduce_sum(warp_val);
+
+        if (tid == 0)
+        {
+            partial_sum_out[blockIdx.x] = warp_val;
+        }
+    }
+}
+
+/**
+ * @brief Launch shared-memory block + Grid-stride loop with warp-level final reduction kernel
+ *
+ * @param[in] x_dev            Input array to reduce
+ * @param[out] partial_sum_dev  Partial sums from GPU kernel
+ * @param[in] n                Length of input array
+ */
+void launch_reduce_warp_shuffle(const float* x_dev, float* partial_sum_dev, size_t n,
+                                int block_size, int grid_size)
+{
+    assert(!std::has_single_bit(static_cast<unsigned>(block_size)) <= 1024 && block_size >= 64);
+
+    // int blocks = cuda::ceil_div(n, block_size);
+    // Calculate shared bytes for specifying the size of block-shared memory
+    size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
+
+    reduce_warp_shuffle_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
+
+    gpu::cuda_check_last();
+}
+
+/**
  * Grid-stride two-pass version
  */
 __global__ void reduce_grid_stride_two_pass_kernel(const float* input_partial_sum, float* out,
@@ -211,7 +288,7 @@ __global__ void reduce_grid_stride_two_pass_kernel(const float* input_partial_su
     __syncthreads();
 
     // block reduction
-    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    for (unsigned int stride = blockDim.x / 2; stride > 32; stride >>= 1)
     {
         if (tid < stride)
         {
@@ -220,10 +297,18 @@ __global__ void reduce_grid_stride_two_pass_kernel(const float* input_partial_su
         __syncthreads();
     }
 
-    // Result is now in local_array[0]
-    if (tid == 0)
+    if (tid < 32)
     {
-        out[0] = local_array[0];
+        float warp_val = local_array[tid];
+        warp_val += local_array[tid + 32];
+
+        // Warp unroll
+        warp_val = warp_reduce_sum(warp_val);
+
+        if (tid == 0)
+        {
+            out[0] = warp_val;
+        }
     }
 }
 
@@ -242,8 +327,7 @@ void launch_reduce_grid_stride_two_pass(const float* x_dev, float* partial_sum_d
     // Calculate shared bytes for specifying the size of block-shared memory
     size_t shared_bytes = static_cast<size_t>(block_size) * sizeof(float);
 
-    reduce_grid_stride_block_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev,
-                                                                             n);
+    reduce_warp_shuffle_kernel<<<grid_size, block_size, shared_bytes>>>(x_dev, partial_sum_dev, n);
 
     gpu::cuda_check_last();
 
@@ -254,7 +338,7 @@ void launch_reduce_grid_stride_two_pass(const float* x_dev, float* partial_sum_d
 
     // In CUDA, the absolute maximum number of threads in a single block is 1024. This limit is
     // enforced by the hardware.
-    assert(second_pass_block_size <= 1024);
+    assert(second_pass_block_size <= 1024 && second_pass_block_size >= 64);
 
     reduce_grid_stride_two_pass_kernel<<<1, second_pass_block_size, shared_bytes_second_pass>>>(
         partial_sum_dev, out_dev, num_elem_input_second_pass);
