@@ -608,6 +608,62 @@ void run_multi_pass_benchmark(std::ofstream& out, const BenchmarkConfig& config,
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
+void run_warp_shuffle_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* x_dev,
+                                float* final_gpu_sum_host, size_t n, int block_size, float ref,
+                                CudaTimer& cuda_timer, CpuTimer& cpu_timer)
+{
+    // Benchmark grid-stride-loop warp shuffle version
+    const std::string version = "cuda_warp_schuffle";
+
+    int num_sms                       = gpu::get_num_sms();
+    int grid_size_grid_stride_version = 4 * num_sms;
+    int interm_stage_elems            = grid_size_grid_stride_version;
+
+    // Allocate interm stage (partial sum) host array memory
+    host_ptr partial_sum_host(cuda_malloc_host<float>(interm_stage_elems));
+
+    // Allocate interm stage (partial sum) device memory
+    DeviceBuffer<float> partial_sum_dev(interm_stage_elems);
+
+    ReductionResult result_kernel = bench_reduction_kernel_only(
+        config.kernel, version, "cuda_kernel", n, block_size, grid_size_grid_stride_version,
+        interm_stage_elems, config.repeat_kernel, ref,
+        [&]()
+        {
+            launch_reduce_warp_shuffle(x_dev, partial_sum_dev.get(), n, block_size,
+                                       grid_size_grid_stride_version);
+        },
+        [&]() -> float
+        {
+            gpu::cuda_check(cudaMemcpy(partial_sum_host.get(), partial_sum_dev.get(),
+                                       interm_stage_elems * sizeof(float), cudaMemcpyDefault));
+
+            reduce_cpu(partial_sum_host.get(), final_gpu_sum_host[0], interm_stage_elems);
+
+            return final_gpu_sum_host[0];
+        },
+        cuda_timer);
+
+    write_csv_row(out, result_kernel);
+
+    // benchmark d2h
+    ReductionResult result_d2h = bench_reduction_d2h(
+        config.kernel, version, "d2h", n, block_size, grid_size_grid_stride_version,
+        interm_stage_elems, partial_sum_dev.get(), partial_sum_host.get(), config.repeat_copy,
+        cpu_timer);
+
+    write_csv_row(out, result_d2h);
+
+    // benchmark block shared memory version cpu finalization
+    ReductionResult result_cpu_final = bench_cpu_finalize(
+        config.kernel, version, "cpu_finalize", n, block_size, grid_size_grid_stride_version,
+        interm_stage_elems, partial_sum_host.get(), config.repeat_cpu_finalize, ref, cpu_timer);
+
+    write_csv_row(out, result_cpu_final);
+
+    // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
 void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, float* x_dev,
                           float* final_gpu_sum_host, size_t n, float ref, CudaTimer& cuda_timer,
                           CpuTimer& cpu_timer)
@@ -623,6 +679,9 @@ void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, flo
 
         run_grid_stride_block_shared_benchmark(out, config, x_dev, final_gpu_sum_host, n,
                                                block_size, ref, cuda_timer, cpu_timer);
+
+        run_warp_shuffle_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size, ref,
+                                   cuda_timer, cpu_timer);
 
         run_grid_stride_two_pass_benchmark(out, config, x_dev, final_gpu_sum_host, n, block_size,
                                            ref, cuda_timer, cpu_timer);
