@@ -1,6 +1,6 @@
 # Benchmark Environment
 
-Unless otherwise stated, the benchmarks were run with one NVIDIA A100 GPU, 8 CPU cores, and 32 GB host memory.
+Unless otherwise stated, the benchmarks were run with one NVIDIA A100 GPU, 18 CPU cores, and 100 GB host memory.
 
 | Item                    | Value                                           |
 | ----------------------- | ----------------------------------------------- |
