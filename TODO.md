@@ -1,21 +1,26 @@
 # TODO list
 
-## Current Focus: Reduction
+## Current Focus: Matrix Transpose
 
-Goal: implement and benchmark several CUDA reduction strategies
+Goal: study 1D memory access, understand global memory coalescing, shared memory tiling, and bank conflicts
 
-- [x] Implement CPU serial reduction
-- [x] Implement CUDA atomic reduction
-- [x] Implement CUDA block-level shared memory
-- [x] grid-stride loop
-- [x] Add OpenMP CPU baseline
-- [x] wrap shuffle reduction
-- [x] Add correctness check with absolute and relative error
-- [x] Add benchmark sweep over `n`
-- [x] Add benchmark sweep over block size
-- [x] Output benchmark data to `results/data/reduction`
-- [x] Generate Markdown tables
-- [x] Write `results/reduction.md`
+- [ ] Implement CPU reference transpose
+- [ ] Implement CUDA copy baseline
+- [ ] Implement CUDA naive transpose
+- [ ] Implement CUDA shared memory tiled transpose
+- [ ] Implement CUDA padded shared memory tiled transpose
+- [ ] Add OpenMP CPU baseline
+- [ ] Add correctness check
+- [ ] Add benchmark sweep over square matrix size
+- [ ] Add benchmark sweep over tile size
+- [ ] Compare transpose bandwidth against device-to-device copy bandwidth
+- [ ] Compare effective bandwidth to copy baseline
+- [ ] Inspect global memory load/store efficiency
+- [ ] Inspect shared memory bank conflicts
+- [ ] Output benchmark data to `results/data/transpose`
+- [ ] Generate Markdown tables
+- [ ] Generate Jinja benchmark report template
+- [ ] Generate report `results/transpose.md`
 
 ## Possible Improvements
 
@@ -23,12 +28,13 @@ Goal: implement and benchmark several CUDA reduction strategies
 
 ## Backlog
 
-- [ ] Compare pageable host memory and pinned host memory for H2D/D2H transfer
-
+- [ ]
 
 ## Next Kernels
 
-- [ ] Matrix transpose
 - [ ] Matrix multiplication
 - [ ] Softmax
+- [ ] LayerNorm
+- [ ] 2D Stencil
+- [ ] SpMV
 

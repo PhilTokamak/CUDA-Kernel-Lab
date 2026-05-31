@@ -6,6 +6,7 @@ A modern CUDA/C++ playground for experimenting with GPU kernels and learning GPU
 
 - Vector Add
 - Reduction
+- Matrix Transpose
 
 ## Features
 
@@ -13,7 +14,6 @@ A modern CUDA/C++ playground for experimenting with GPU kernels and learning GPU
 - CPU/GPU result verification
 - CUDA event-based timing utilities
 - Modern CMake + Ninja preset-based build workflow
-- Error handling with `std::source_location`
 - `fmtlib`-based diagnostics
 
 ## Goals
