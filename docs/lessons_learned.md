@@ -16,22 +16,22 @@ a first-order estimate of memory traffic per element is
 2 loads + 1 store = 3 * sizeof(float) 
 ```
 
-However, this is only effective bandwidth estimate. On real CPUs, several factors complicate the interpretation:
+However, this is only an effective bandwidth estimate. On real CPUs, several factors complicate the interpretation:
 
 ### Cache effects
 
 If the working set fits in L1, L2, or L3 cache, the measured bandwidth may represent cache bandwidth rather than DRAM bandwidth.
 
-To approximate DRAM bandwidth, the total working set should be much larger than the last-lavel cache.
+To approximate DRAM bandwidth, the total working set should be much larger than the last-level cache.
 
 ### Write allocate
 
 For normal cached stores, the CPU may first load the target cache line before writing it. This can introduce additional memory traffic.
 
-Therefore, the actual memory traddic may be closer to:
+Therefore, the actual memory traffic may be closer to:
 
 ```text
-read a + read b + read c cache ine + write c
+read a + read b + read c cache line + write c
 ```
 
 rather than just
@@ -469,3 +469,35 @@ This creates a cleaner dependency graph and avoids global pollution.
 
 
 The central idea is: **Everything should be attached to targets.**
+
+
+
+## CUDA Execution Model
+
+A useful simplified mental model:
+
+- Kernel launch creates a grid.
+- The grid contains blocks.
+- Blocks are scheduled onto SMs.
+- Each block contains threads.
+- Threads are executed in warps of 32.
+- Each thread in a warp is a lane.
+- Warps execute instructions in SIMT style.
+- Threads in a block can communicate via shared memory.
+- Threads in a warp can communicate via shuffle instructions.
+- Different blocks usually cannot synchronize within a normal kernel.
+
+
+
+
+
+For performance work, the most important questions are often:
+
+- How many blocks are launched?
+- How many blocks can reside on each SM?
+- How many warps are active?
+- Are global memory accesses coalesced?
+- Is the kernel memory-bound or compute-bound?
+- Is there warp divergence?
+- Is shared memory used efficiently?
+- Are there too many global atomics?
