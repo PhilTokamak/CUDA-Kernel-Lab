@@ -93,6 +93,25 @@ set_target_properties(
     ${CMAKE_BINARY_DIR}/bin
 )
 
+# Transpose
+add_executable(
+    bench_transpose
+    benchmarks/bench_transpose.cu
+)
+
+target_link_libraries(
+    bench_transpose
+    PRIVATE
+    cuda_kernels
+)
+
+set_target_properties(
+    bench_transpose
+    PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY
+    ${CMAKE_BINARY_DIR}/bin
+)
+
 
 
 # =====================================
