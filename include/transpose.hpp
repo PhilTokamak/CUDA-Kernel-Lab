@@ -1,0 +1,1 @@
+void transpose_cpu(const float* mat, float* matT, size_t m, size_t n);
