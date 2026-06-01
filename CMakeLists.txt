@@ -23,6 +23,7 @@ add_library(
     cuda_kernels
     src/vector_add.cu
     src/reduction.cu
+    src/transpose.cu
 )
 
 target_include_directories(
