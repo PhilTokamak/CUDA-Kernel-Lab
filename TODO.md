@@ -4,9 +4,10 @@
 
 Goal: study 1D memory access, understand global memory coalescing, shared memory tiling, and bank conflicts
 
-- [ ] Implement CPU reference transpose
-- [ ] Implement CUDA copy baseline
-- [ ] Implement CUDA naive transpose
+- [x] Implement CPU reference transpose
+- [x] Implement CPU copy baseline
+- [x] Implement CUDA copy baseline
+- [x] Implement CUDA naive transpose
 - [ ] Implement CUDA shared memory tiled transpose
 - [ ] Implement CUDA padded shared memory tiled transpose
 - [ ] Add OpenMP CPU baseline
