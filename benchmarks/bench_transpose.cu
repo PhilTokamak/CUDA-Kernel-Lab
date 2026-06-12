@@ -234,6 +234,24 @@ TransposeResult bench_reduction_cpu_serial(const float* mat_host, float* matT_ho
     return r;
 }
 
+TransposeResult bench_cpu_copy_baseline(const float* mat_host, float* mat_copy_host,
+                                        MatrixShape shape, int repeat, CpuTimer& cpu_timer)
+{
+    TransposeResult r =
+        make_transpose_result("transpose", "cpu_serial", "copy_baseline", FP32_DTYPE, shape,
+                              dim3(0, 0, 0), dim3(0, 0, 0), repeat);
+
+    r.time_stats = benchmark_cpu(
+        [&]() { copy_cpu_baseline(mat_host, mat_copy_host, shape.num_elem()); }, repeat, cpu_timer);
+
+    r.bytes   = shape.bytes();
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+
+    r.correct = true;
+
+    return r;
+}
+
 TransposeResult bench_reduction_cpu_omp(const float* mat_host, float* matT_host, MatrixShape shape,
                                         int repeat, const float* ref, CpuTimer& cpu_timer)
 {
@@ -324,19 +342,43 @@ TransposeResult bench_transpose_d2h(const std::string& kernel, const std::string
     return r;
 }
 
+TransposeResult bench_cuda_copy_baseline(const float* mat_dev, float* mat_copy_dev,
+                                         MatrixShape shape, int repeat, CudaTimer& cuda_timer)
+{
+    dim3 block_size{256};
+    dim3 grid_size_copy_baseline{
+        static_cast<unsigned int>((shape.num_elem() + block_size.x - 1) / block_size.x)};
+
+    TransposeResult r = bench_transpose_kernel_only(
+        "tranpose", "cuda_copy", "copy_baseline", shape, block_size, grid_size_copy_baseline,
+        repeat, nullptr,
+        [&]()
+        {
+            copy_cuda_baseline<<<grid_size_copy_baseline, block_size>>>(mat_dev, mat_copy_dev,
+                                                                        shape.num_elem());
+        },
+        [&]() -> CheckResult { return CheckResult{}; }, cuda_timer);
+
+    r.bytes   = shape.bytes();
+    r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
+
+    r.correct = true;
+
+    return r;
+}
+
 void run_naive_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
                                 float* matT_host, MatrixShape shape, dim3 block_size, float* ref,
                                 CudaTimer& cuda_timer, CpuTimer& cpu_timer)
 {
-    // Benchmark Atomic Add version
     const std::string version = "cuda_naive";
-    dim3 grid_siz_naive_kernel{(shape.cols + block_size.x - 1) / block_size.x,
-                               (shape.rows + block_size.y - 1) / block_size.y};
+    dim3 grid_size_naive_kernel{(shape.cols + block_size.x - 1) / block_size.x,
+                                (shape.rows + block_size.y - 1) / block_size.y};
 
     DeviceBuffer<float> matT_dev(shape.num_elem());
 
     TransposeResult result_atomic = bench_transpose_kernel_only(
-        config.kernel, version, "cuda_kernel", shape, block_size, grid_siz_naive_kernel,
+        config.kernel, version, "cuda_kernel", shape, block_size, grid_size_naive_kernel,
         config.repeat_kernel, ref,
         [&]()
         {
@@ -381,8 +423,8 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     size_t n     = shape.num_elem();
     size_t bytes = shape.bytes();
 
-    fmt::print("Running transpose benchmark for shape = {} (Matrix size = {} MiB)\n", shape,
-               static_cast<double>(bytes) / static_cast<double>(1ULL << 20));
+    fmt::print("Running transpose benchmark for shape = {}x{} (Matrix size = {} MiB)\n", shape.rows,
+               shape.cols, static_cast<double>(bytes) / static_cast<double>(1ULL << 20));
 
     // Pointers to host memory
     host_ptr mat_host(cuda_malloc_host<float>(n));
@@ -391,13 +433,20 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     // Initialize vectors on the host
     init_matrix(mat_host.get(), shape);
 
+    // CPU copy baseline
+    host_ptr mat_copy_host(cuda_malloc_host<float>(n));
+    TransposeResult result_cpu_copy_baseline = bench_cpu_copy_baseline(
+        mat_host.get(), mat_copy_host.get(), shape, config.repeat_copy, cpu_timer);
+
+    write_csv_row(out, result_cpu_copy_baseline);
+
     // CPU serial benchmark
     TransposeResult result_cpu_serial = bench_reduction_cpu_serial(
         mat_host.get(), matT_host.get(), shape, config.repeat_cpu, cpu_timer);
 
     write_csv_row(out, result_cpu_serial);
 
-    auto ref = std::make_unique<float>(n);
+    auto ref = std::make_unique<float[]>(n);
     std::copy(matT_host.get(), matT_host.get() + n, ref.get());
 
     auto check = check_array_close(matT_host.get(), ref.get(), n);
@@ -418,6 +467,13 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
 
     write_csv_row(out, result_h2d);
 
+    // GPU copy baseline
+    DeviceBuffer<float> mat_copy_dev(n);
+    TransposeResult result_cuda_copy_baseline = bench_cuda_copy_baseline(
+        mat_dev.get(), mat_copy_dev.get(), shape, config.repeat_copy, cuda_timer);
+    write_csv_row(out, result_cuda_copy_baseline);
+
+    // Block size sweep
     run_block_size_sweep(out, config, mat_dev.get(), matT_host.get(), shape, ref.get(), cuda_timer,
                          cpu_timer);
 
