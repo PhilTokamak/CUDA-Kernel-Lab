@@ -282,7 +282,7 @@ TransposeResult bench_transpose_h2d(const std::string& kernel, const std::string
     TransposeResult r = make_transpose_result(kernel, version, mode, FP32_DTYPE, shape,
                                               dim3(0, 0, 0), dim3(0, 0, 0), repeat);
 
-    r.bytes      = num_bytes_transpose(shape);
+    r.bytes      = shape.bytes();
     r.time_stats = benchmark_cpu(
         [&]() { gpu::cuda_check(cudaMemcpy(mat_dev, mat_host, shape.bytes(), cudaMemcpyDefault)); },
         repeat, cpu_timer);
@@ -329,7 +329,7 @@ TransposeResult bench_transpose_d2h(const std::string& kernel, const std::string
     TransposeResult r = make_transpose_result(kernel, version, mode, FP32_DTYPE, shape,
                                               dim3(0, 0, 0), dim3(0, 0, 0), repeat);
 
-    r.bytes      = num_bytes_transpose(shape);
+    r.bytes      = shape.bytes();
     r.time_stats = benchmark_cpu(
         [&]()
         { gpu::cuda_check(cudaMemcpy(matT_host, matT_dev, shape.bytes(), cudaMemcpyDefault)); },
