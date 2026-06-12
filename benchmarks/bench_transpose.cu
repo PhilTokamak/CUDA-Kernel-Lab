@@ -244,7 +244,7 @@ TransposeResult bench_cpu_copy_baseline(const float* mat_host, float* mat_copy_h
     r.time_stats = benchmark_cpu(
         [&]() { copy_cpu_baseline(mat_host, mat_copy_host, shape.num_elem()); }, repeat, cpu_timer);
 
-    r.bytes   = shape.bytes();
+    r.bytes   = shape.bytes() * 2;
     r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
 
     r.correct = true;
@@ -359,7 +359,7 @@ TransposeResult bench_cuda_copy_baseline(const float* mat_dev, float* mat_copy_d
         },
         [&]() -> CheckResult { return CheckResult{}; }, cuda_timer);
 
-    r.bytes   = shape.bytes();
+    r.bytes   = shape.bytes() * 2;
     r.bw_GB_s = bandwidth_GB_s(r.bytes, r.time_stats.avg_ms);
 
     r.correct = true;
