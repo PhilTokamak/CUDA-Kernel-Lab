@@ -14,6 +14,18 @@ void transpose_cpu(const float* mat, float* matT, size_t rows, size_t cols)
     }
 }
 
+void transpose_cpu_omp(const float* mat, float* matT, size_t rows, size_t cols)
+{
+#pragma omp parallel for collapse(2) schedule(static)
+    for (size_t i = 0; i < rows; ++i)
+    {
+        for (size_t j = 0; j < cols; ++j)
+        {
+            matT[j * rows + i] = mat[i * cols + j];
+        }
+    }
+}
+
 __global__ void transpose_naive_kernel(const float* mat, float* matT, size_t rows, size_t cols)
 {
     size_t col = threadIdx.x + blockIdx.x * blockDim.x;
