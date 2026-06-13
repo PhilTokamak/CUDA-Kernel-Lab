@@ -13,7 +13,7 @@ c[i] = a[i] + b[i];
 a first-order estimate of memory traffic per element is
 
 ```text
-2 loads + 1 store = 3 * sizeof(float) 
+2 loads + 1 store = 3 * sizeof(float)
 ```
 
 However, this is only an effective bandwidth estimate. On real CPUs, several factors complicate the interpretation:
@@ -55,6 +55,18 @@ Hardware prefetchers can hide some memory latency.
 ### NUMA effects
 
 Memory placement may matter on multi-socket systems.
+
+## Bandwidth Definitions
+
+For host-device transfers, bandwidth is computed using the payload size passed to `cudaMemcpy`.
+
+- H2D/D2H bytes = `bytes that are transferred`
+
+For GPU kernels, effective bandwidth is computed using useful device memory traffic:
+
+- kernel bytes = `bytes that are read` + `bytes that are written`
+
+The H2D/D2H bandwidth and kernel effective bandwidth refer to different memory systems. H2D/D2H measures host-device transfer payload size bandwidth, i.e. it measures PCI / NVLink / host-device transfer path efffective bandwidth, while kernel bandwidth measures GPU device access throughput.
 
 
 
