@@ -41,7 +41,7 @@ __global__ void transpose_naive_kernel(const float* mat, float* matT, size_t row
  * @brief Launch naive transpose kernel
  *
  * @param[in] in_dev            Input matrix to transpose
- * @param[out] partial_sum_dev  Output matrix on device
+ * @param[out] matT_dev         Output matrix on device
  * @param[in] rows              num of rows of input matrix
  * @param[in] cols              num of cols of input matrix
  */
@@ -52,4 +52,6 @@ void launch_transpose_naive(const float* mat_dev, float* matT_dev, size_t rows, 
     dim3 grid(cuda::ceil_div(rows, block.x), cuda::ceil_div(cols, block.y));
 
     transpose_naive_kernel<<<grid, block>>>(mat_dev, matT_dev, rows, cols);
+
+    gpu::cuda_check_last();
 }
