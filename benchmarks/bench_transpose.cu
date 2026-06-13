@@ -368,14 +368,14 @@ TransposeResult bench_cuda_copy_baseline(const float* mat_dev, float* mat_copy_d
 }
 
 void run_naive_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
-                                float* matT_host, MatrixShape shape, dim3 block_size, float* ref,
+                                float* matT_dev, MatrixShape shape, dim3 block_size, float* ref,
                                 CudaTimer& cuda_timer, CpuTimer& cpu_timer)
 {
     const std::string version = "cuda_naive";
     dim3 grid_size_naive_kernel{(shape.cols + block_size.x - 1) / block_size.x,
                                 (shape.rows + block_size.y - 1) / block_size.y};
 
-    DeviceBuffer<float> matT_dev(shape.num_elem());
+    host_ptr matT_host(cuda_malloc_host<float>(shape.num_elem()));
 
     TransposeResult result_atomic = bench_transpose_kernel_only(
         config.kernel, version, "cuda_kernel", shape, block_size, grid_size_naive_kernel,
@@ -383,36 +383,30 @@ void run_naive_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
         [&]()
         {
             // Launch kernel
-            launch_transpose_naive(mat_dev, matT_dev.get(), shape.rows, shape.cols);
+            launch_transpose_naive(mat_dev, matT_dev, shape.rows, shape.cols);
         },
         [&]() -> CheckResult
         {
             gpu::cuda_check(
-                cudaMemcpy(matT_host, matT_dev.get(), shape.bytes(), cudaMemcpyDefault));
+                cudaMemcpy(matT_host.get(), matT_dev, shape.bytes(), cudaMemcpyDefault));
 
-            return check_array_close(matT_host, ref, shape.num_elem());
+            return check_array_close(matT_host.get(), ref, shape.num_elem());
         },
         cuda_timer);
 
     write_csv_row(out, result_atomic);
 
-    // benchmark d2h
-    TransposeResult result_d2h_atomic =
-        bench_transpose_d2h(config.kernel, version, "d2h", {0, 0, 0}, {0, 0, 0}, matT_dev.get(),
-                            matT_host, shape, config.repeat_copy, cpu_timer);
-    write_csv_row(out, result_d2h_atomic);
-
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
 void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
-                          float* matT_host, MatrixShape shape, float* ref, CudaTimer& cuda_timer,
+                          float* matT_dev, MatrixShape shape, float* ref, CudaTimer& cuda_timer,
                           CpuTimer& cpu_timer)
 {
     // CDUA kernel sweep over block sizes
     for (auto block_size : config.block_sizes)
     {
-        run_naive_kernel_benchmark(out, config, mat_dev, matT_host, shape, block_size, ref,
+        run_naive_kernel_benchmark(out, config, mat_dev, matT_dev, shape, block_size, ref,
                                    cuda_timer, cpu_timer);
     }
 }
@@ -459,6 +453,7 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
 
     // Allocate device memory
     DeviceBuffer<float> mat_dev(n);
+    DeviceBuffer<float> matT_dev(n);
 
     // H2D benchmark
     TransposeResult result_h2d =
@@ -474,8 +469,14 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     write_csv_row(out, result_cuda_copy_baseline);
 
     // Block size sweep
-    run_block_size_sweep(out, config, mat_dev.get(), matT_host.get(), shape, ref.get(), cuda_timer,
+    run_block_size_sweep(out, config, mat_dev.get(), matT_dev.get(), shape, ref.get(), cuda_timer,
                          cpu_timer);
+
+    // benchmark d2h
+    TransposeResult result_d2h_atomic =
+        bench_transpose_d2h(config.kernel, "all_gpu_version", "d2h", {0, 0, 0}, {0, 0, 0},
+                            matT_dev.get(), matT_host.get(), shape, config.repeat_copy, cpu_timer);
+    write_csv_row(out, result_d2h_atomic);
 
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
