@@ -8,10 +8,10 @@ Goal: study 1D memory access, understand global memory coalescing, shared memory
 - [x] Implement CPU copy baseline
 - [x] Implement CUDA copy baseline
 - [x] Implement CUDA naive transpose
-- [ ] Implement CUDA shared memory tiled transpose
+- [x] Implement CUDA shared memory tiled transpose
 - [ ] Implement CUDA padded shared memory tiled transpose
-- [ ] Add OpenMP CPU baseline
-- [ ] Add correctness check
+- [x] Add OpenMP CPU baseline
+- [x] Add correctness check
 - [ ] Add benchmark sweep over square matrix size
 - [ ] Add benchmark sweep over tile size
 - [ ] Compare transpose bandwidth against device-to-device copy bandwidth
