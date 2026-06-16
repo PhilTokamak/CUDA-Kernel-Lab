@@ -106,7 +106,6 @@ __global__ void transpose_tiled_kernel(const float* mat, float* matT, size_t row
  * @param[in] rows              num of rows of input matrix
  * @param[in] cols              num of cols of input matrix
  *
- * @note Only suitable for d block_size launch
  */
 template <unsigned int TILE_DIM, unsigned int BLOCK_ROWS>
 void launch_transpose_tiled_kernel(const float* mat_dev, float* matT_dev, size_t rows, size_t cols,
