@@ -45,13 +45,10 @@ __global__ void transpose_naive_kernel(const float* mat, float* matT, size_t row
  * @param[in] rows              num of rows of input matrix
  * @param[in] cols              num of cols of input matrix
  */
-void launch_transpose_naive(const float* mat_dev, float* matT_dev, size_t rows, size_t cols)
+void launch_transpose_naive(const float* mat_dev, float* matT_dev, size_t rows, size_t cols,
+                            dim3 block_size, dim3 grid_size)
 {
-    dim3 block(16, 16);
-
-    dim3 grid(cuda::ceil_div(rows, block.x), cuda::ceil_div(cols, block.y));
-
-    transpose_naive_kernel<<<grid, block>>>(mat_dev, matT_dev, rows, cols);
+    transpose_naive_kernel<<<grid_size, block_size>>>(mat_dev, matT_dev, rows, cols);
 
     gpu::cuda_check_last();
 }
@@ -79,7 +76,7 @@ __global__ void transpose_tiled_kernel(const float* mat, float* matT, size_t row
 
     __syncthreads();
 
-    // Location in matT, note that here block are at tranposed locations
+    // Location in matT, note that here blocks are at tranposed locations
     x = blockIdx.y * TILE_DIM + threadIdx.x;
     y = blockIdx.x * TILE_DIM + threadIdx.y;
 
