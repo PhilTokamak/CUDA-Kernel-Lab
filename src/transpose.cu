@@ -115,3 +115,21 @@ void launch_transpose_tiled_kernel(const float* mat_dev, float* matT_dev, size_t
 
     gpu::cuda_check_last();
 }
+
+// Explicit instanciations
+
+// Generate host launcher specializations for the benchmarked tile sizes.
+// Otherwise these symbols are missing at link time because the template
+// implementation is not visible outside transpose.cu.
+template void launch_transpose_tiled_kernel<8u, 8u>(const float*, float*, size_t, size_t, dim3,
+                                                    dim3);
+template void launch_transpose_tiled_kernel<16u, 8u>(const float*, float*, size_t, size_t, dim3,
+                                                     dim3);
+template void launch_transpose_tiled_kernel<32u, 8u>(const float*, float*, size_t, size_t, dim3,
+                                                     dim3);
+template void launch_transpose_tiled_kernel<16u, 16u>(const float*, float*, size_t, size_t, dim3,
+                                                      dim3);
+template void launch_transpose_tiled_kernel<32u, 16u>(const float*, float*, size_t, size_t, dim3,
+                                                      dim3);
+template void launch_transpose_tiled_kernel<32u, 32u>(const float*, float*, size_t, size_t, dim3,
+                                                      dim3);
