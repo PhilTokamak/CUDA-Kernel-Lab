@@ -77,6 +77,12 @@ CheckResult check_array_close(const float* a, const float* ref, size_t n, double
     return result;
 }
 
+struct TiledConfig
+{
+    unsigned int tile_dim;
+    unsigned int block_rows;
+};
+
 struct TransposeResult
 {
     std::string kernel{}; // kernel name, e.g. `reduction`
@@ -89,6 +95,11 @@ struct TransposeResult
     MatrixShape shape = {0, 0}; // shape of matrix
     dim3 block_size{0, 0, 0};   // CUDA block size (0 for CPU/H2D/D2H)
     dim3 grid_size{0, 0, 0};    // CUDA grid size (0 for CPU/H2D/D2H)
+
+    // Optional. Useful for tiled transpose kernel
+    unsigned int tile_dim         = 0;
+    unsigned int block_rows       = 0;
+    unsigned int elems_per_thread = 1;
 
     int repeat{};
     size_t bytes{};
@@ -109,11 +120,16 @@ struct BenchmarkConfig
     std::filesystem::path output_csv{"results/data/transpose.csv"};
 
     // Vector size to sweep
-    const std::vector<MatrixShape> shapes{
-        {1024, 1024}, {2048, 2048}, {4096, 4096}, {4096, 2048}, {2048, 4096}};
+    const std::vector<MatrixShape> shapes{{4096, 4096}};
 
     // GPU block size to sweep
-    const std::vector<dim3> block_sizes{{8, 8}, {16, 8}, {8, 16}, {16, 16}, {32, 32}};
+
+    // For non-tiled transpose
+    const std::vector<dim3> block_sizes{{8, 8},  {16, 8},  {8, 16}, {16, 16},
+                                        {32, 8}, {32, 16}, {32, 32}};
+    // For tiled transpose
+    const std::vector<TiledConfig> tiled_configs{{8, 8},  {16, 8},  {16, 16},
+                                                 {32, 8}, {32, 16}, {32, 32}};
 
     // Number of measurement repetitions
     int repeat_cpu    = 10;
@@ -148,7 +164,8 @@ void init_matrix(float* mat, MatrixShape shape, unsigned seed = 12345)
 TransposeResult make_transpose_result(const std::string& kernel, const std::string& version,
                                       const std::string& mode, const DTypeInfo& dtype_info,
                                       MatrixShape shape, dim3 block_size, dim3 grid_size,
-                                      int repeat)
+                                      int repeat, unsigned int tile_dim = 0,
+                                      unsigned int block_rows = 0)
 {
     TransposeResult r{};
 
@@ -158,10 +175,13 @@ TransposeResult make_transpose_result(const std::string& kernel, const std::stri
     r.dtype         = dtype_info.name;
     r.size_of_dtype = dtype_info.size;
 
-    r.shape      = shape;
-    r.block_size = block_size;
-    r.grid_size  = grid_size;
-    r.repeat     = repeat;
+    r.shape            = shape;
+    r.block_size       = block_size;
+    r.grid_size        = grid_size;
+    r.tile_dim         = tile_dim;
+    r.block_rows       = block_rows;
+    r.elems_per_thread = block_rows != 0 ? tile_dim / block_rows : 1;
+    r.repeat           = repeat;
 
     return r;
 }
@@ -175,12 +195,17 @@ void write_csv_header(std::ofstream& out)
         "dtype",         // data type, e.g. fp32
         "size_of_dtype", // size of dtype (in bytes)
 
-        "rows",         // num of rows
-        "cols",         // num of cols
+        "rows", // num of rows
+        "cols", // num of cols
+
         "block_size_x", // CUDA block size in x (0 for CPU/H2D/D2H)
         "block_size_y", // CUDA block size in y (0 for CPU/H2D/D2H)
         "grid_size_x",  // CUDA grid size in x (0 for CPU/H2D/D2H)
         "grid_size_y",  // CUDA grid size in y (0 for CPU/H2D/D2H)
+
+        "tile_dim",         // TILE size for tiled version
+        "block_rows",       // num of rows in a tile that is processed each time for one block
+        "elems_per_thread", // num of elems for each thread
 
         "repeat", // number of measurement repetitions
         "avg_ms", // average time in ms
@@ -191,7 +216,9 @@ void write_csv_header(std::ofstream& out)
         "bytes",   // bytes used for bandwidth calculation
         "bw_GB_s", // Effective bandwidth
 
-        "max_abs_error", "max_rel_error", "correct"};
+        "max_abs_error",
+        "max_rel_error",
+        "correct"};
 
     fmt::print(out, "{}\n", fmt::join(headers, ","));
 }
@@ -200,14 +227,19 @@ void write_csv_row(std::ofstream& out, const TransposeResult& r)
 {
     fmt::print(out,
                "{},{},{},{},{},"
-               "{},{},{},{},{},{},"
+               "{},{},"
+               "{},{},{},{},"
+               "{},{},{},"
                "{},{:.6f},{:.6f},{:.6f},{:.3f},"
                "{},{:.3f},"
                "{:.6e},{:.6e},{}\n",
                r.kernel, r.version, r.mode, r.dtype, r.size_of_dtype,
 
-               r.shape.rows, r.shape.cols, r.block_size.x, r.block_size.y, r.grid_size.x,
-               r.grid_size.y,
+               r.shape.rows, r.shape.cols,
+
+               r.block_size.x, r.block_size.y, r.grid_size.x, r.grid_size.y,
+
+               r.tile_dim, r.block_rows, r.elems_per_thread,
 
                r.repeat, r.time_stats.avg_ms, r.time_stats.min_ms, r.time_stats.max_ms,
                r.time_stats.std_ms,
@@ -377,13 +409,14 @@ void run_naive_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
 
     host_ptr matT_host(cuda_malloc_host<float>(shape.num_elem()));
 
-    TransposeResult result_atomic = bench_transpose_kernel_only(
+    TransposeResult result = bench_transpose_kernel_only(
         config.kernel, version, "cuda_kernel", shape, block_size, grid_size_naive_kernel,
         config.repeat_kernel, ref,
         [&]()
         {
             // Launch kernel
-            launch_transpose_naive(mat_dev, matT_dev, shape.rows, shape.cols);
+            launch_transpose_naive(mat_dev, matT_dev, shape.rows, shape.cols, block_size,
+                                   grid_size_naive_kernel);
         },
         [&]() -> CheckResult
         {
@@ -394,19 +427,133 @@ void run_naive_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
         },
         cuda_timer);
 
-    write_csv_row(out, result_atomic);
+    write_csv_row(out, result);
 
     // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
+template <unsigned int TILE_DIM, unsigned int BLOCK_ROWS>
+void run_tiled_kernel_benchmark_helper(std::ofstream& out, const BenchmarkConfig& config,
+                                       float* mat_dev, float* matT_dev, MatrixShape shape,
+                                       float* ref, CudaTimer& cuda_timer, CpuTimer& cpu_timer)
+{
+    const std::string version = "cuda_tiled";
+
+    dim3 block_size(TILE_DIM, BLOCK_ROWS);
+
+    unsigned int grid_size_x = (static_cast<unsigned int>(shape.cols) + TILE_DIM - 1u) / TILE_DIM;
+    unsigned int grid_size_y = (static_cast<unsigned int>(shape.rows) + TILE_DIM - 1u) / TILE_DIM;
+
+    dim3 grid_size{grid_size_x, grid_size_y};
+
+    host_ptr matT_host(cuda_malloc_host<float>(shape.num_elem()));
+
+    TransposeResult result = bench_transpose_kernel_only(
+        config.kernel, version, "cuda_kernel", shape, block_size, grid_size, config.repeat_kernel,
+        ref,
+        [&]()
+        {
+            // Launch kernel
+            launch_transpose_tiled_kernel<TILE_DIM, BLOCK_ROWS>(
+                mat_dev, matT_dev, static_cast<size_t>(shape.rows), static_cast<size_t>(shape.cols),
+                block_size, grid_size);
+        },
+        [&]() -> CheckResult
+        {
+            gpu::cuda_check(
+                cudaMemcpy(matT_host.get(), matT_dev, shape.bytes(), cudaMemcpyDefault));
+
+            return check_array_close(matT_host.get(), ref, shape.num_elem());
+        },
+        cuda_timer);
+
+    result.tile_dim         = TILE_DIM;
+    result.block_rows       = BLOCK_ROWS;
+    result.elems_per_thread = TILE_DIM / BLOCK_ROWS;
+
+    write_csv_row(out, result);
+
+    // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
+void run_tiled_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
+                                float* matT_dev, MatrixShape shape, TiledConfig tiled_config,
+                                float* ref, CudaTimer& cuda_timer, CpuTimer& cpu_timer)
+{
+    const auto tile_dim   = tiled_config.tile_dim;
+    const auto block_rows = tiled_config.block_rows;
+
+    if (block_rows == 8)
+    {
+        if (tile_dim == 8)
+        {
+            run_tiled_kernel_benchmark_helper<8u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                      cuda_timer, cpu_timer);
+        }
+        else if (tile_dim == 16)
+        {
+            run_tiled_kernel_benchmark_helper<16u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                       cuda_timer, cpu_timer);
+        }
+        else if (tile_dim == 32)
+        {
+            run_tiled_kernel_benchmark_helper<32u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                       cuda_timer, cpu_timer);
+        }
+        else
+        {
+            throw std::runtime_error(
+                fmt::format("Unsupported tiled transpose config: TILE_DIM={}, BLOCK_ROWS={}",
+                            tile_dim, block_rows));
+        }
+    }
+    else if (block_rows == 16)
+    {
+        if (tile_dim == 16)
+        {
+            run_tiled_kernel_benchmark_helper<16u, 16u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                        cuda_timer, cpu_timer);
+        }
+        else if (tile_dim == 32)
+        {
+            run_tiled_kernel_benchmark_helper<32u, 16u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                        cuda_timer, cpu_timer);
+        }
+        else
+        {
+            throw std::runtime_error(
+                fmt::format("Unsupported tiled transpose config: TILE_DIM={}, BLOCK_ROWS={}",
+                            tile_dim, block_rows));
+        }
+    }
+    else if (block_rows == 32 && tile_dim == 32)
+    {
+        run_tiled_kernel_benchmark_helper<32u, 32u>(out, config, mat_dev, matT_dev, shape, ref,
+                                                    cuda_timer, cpu_timer);
+    }
+    else
+    {
+        throw std::runtime_error(
+            fmt::format("Unsupported tiled transpose config: TILE_DIM={}, BLOCK_ROWS={}", tile_dim,
+                        block_rows));
+    }
 }
 
 void run_block_size_sweep(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
                           float* matT_dev, MatrixShape shape, float* ref, CudaTimer& cuda_timer,
                           CpuTimer& cpu_timer)
 {
-    // CDUA kernel sweep over block sizes
+    // CUDA kernel sweep over block sizes
     for (auto block_size : config.block_sizes)
     {
         run_naive_kernel_benchmark(out, config, mat_dev, matT_dev, shape, block_size, ref,
+                                   cuda_timer, cpu_timer);
+    }
+
+    // CUDA kernel seep over tiled configuration
+    for (auto tiled_config : config.tiled_configs)
+    {
+        run_tiled_kernel_benchmark(out, config, mat_dev, matT_dev, shape, tiled_config, ref,
                                    cuda_timer, cpu_timer);
     }
 }
