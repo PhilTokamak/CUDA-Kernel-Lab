@@ -133,3 +133,85 @@ template void launch_transpose_tiled_kernel<32u, 16u>(const float*, float*, size
                                                       dim3);
 template void launch_transpose_tiled_kernel<32u, 32u>(const float*, float*, size_t, size_t, dim3,
                                                       dim3);
+
+template <unsigned int TILE_DIM, unsigned int BLOCK_ROWS>
+__global__ void transpose_tiled_padded_kernel(const float* mat, float* matT, size_t rows,
+                                              size_t cols)
+{
+    __shared__ float tile[TILE_DIM][TILE_DIM + 1];
+
+    // Location in mat
+    unsigned int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    unsigned int y = blockIdx.y * TILE_DIM + threadIdx.y;
+
+    // Load mat into tile
+    for (unsigned int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+    {
+        auto row = y + j;
+        auto col = x;
+
+        if (row < rows && col < cols)
+        {
+            tile[threadIdx.y + j][threadIdx.x] = mat[row * cols + col];
+        }
+    }
+
+    __syncthreads();
+
+    // Location in matT, note that here blocks are at tranposed locations
+    x = blockIdx.y * TILE_DIM + threadIdx.x;
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
+
+    // Write transposed tile to matT
+    for (unsigned int j = 0; j < TILE_DIM; j += BLOCK_ROWS)
+    {
+        auto row = y + j;
+        auto col = x;
+
+        // matT has shape cols x rows since it is the transpose of A which
+        // has the shape rows x cols
+        if (row < cols && col < rows)
+        {
+            matT[row * rows + col] = tile[threadIdx.x][threadIdx.y + j];
+        }
+    }
+}
+
+/**
+ * @brief Launch tiled padded transpose kernel
+ *
+ * @param[in] in_dev            Input matrix to transpose
+ * @param[out] matT_dev         Output matrix on device
+ * @param[in] rows              num of rows of input matrix
+ * @param[in] cols              num of cols of input matrix
+ *
+ */
+template <unsigned int TILE_DIM, unsigned int BLOCK_ROWS>
+void launch_transpose_tiled_padded_kernel(const float* mat_dev, float* matT_dev, size_t rows,
+                                          size_t cols, dim3 block_size, dim3 grid_size)
+{
+    static_assert(TILE_DIM % BLOCK_ROWS == 0, "TILE_DIM must be divisible by BLOCK_ROWS");
+
+    transpose_tiled_padded_kernel<TILE_DIM, BLOCK_ROWS>
+        <<<grid_size, block_size>>>(mat_dev, matT_dev, rows, cols);
+
+    gpu::cuda_check_last();
+}
+
+// Explicit instanciations
+
+// Generate host launcher specializations for the benchmarked tile sizes.
+// Otherwise these symbols are missing at link time because the template
+// implementation is not visible outside transpose.cu.
+template void launch_transpose_tiled_padded_kernel<8u, 8u>(const float*, float*, size_t, size_t,
+                                                           dim3, dim3);
+template void launch_transpose_tiled_padded_kernel<16u, 8u>(const float*, float*, size_t, size_t,
+                                                            dim3, dim3);
+template void launch_transpose_tiled_padded_kernel<32u, 8u>(const float*, float*, size_t, size_t,
+                                                            dim3, dim3);
+template void launch_transpose_tiled_padded_kernel<16u, 16u>(const float*, float*, size_t, size_t,
+                                                             dim3, dim3);
+template void launch_transpose_tiled_padded_kernel<32u, 16u>(const float*, float*, size_t, size_t,
+                                                             dim3, dim3);
+template void launch_transpose_tiled_padded_kernel<32u, 32u>(const float*, float*, size_t, size_t,
+                                                             dim3, dim3);
