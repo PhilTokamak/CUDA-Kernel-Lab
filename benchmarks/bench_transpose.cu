@@ -65,7 +65,7 @@ CheckResult check_array_close(const float* a, const float* ref, size_t n, double
         double abs_err = std::abs(val - r);
         double rel_err = abs_err / (std::abs(r) + 1e-12);
 
-        if (abs_err > abs_tol + rel_err * std::abs(r))
+        if (abs_err > abs_tol + rel_tol * std::abs(r))
         {
             result.correct = false;
         }
