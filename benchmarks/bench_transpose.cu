@@ -476,6 +476,51 @@ void run_tiled_kernel_benchmark_helper(std::ofstream& out, const BenchmarkConfig
     // GPU allocated memory is released automatically by DeviceBuffer.
 }
 
+template <unsigned int TILE_DIM, unsigned int BLOCK_ROWS>
+void run_tiled_padded_kernel_benchmark_helper(std::ofstream& out, const BenchmarkConfig& config,
+                                              float* mat_dev, float* matT_dev, MatrixShape shape,
+                                              float* ref, CudaTimer& cuda_timer,
+                                              CpuTimer& cpu_timer)
+{
+    const std::string version = "cuda_tiled_padded";
+
+    dim3 block_size(TILE_DIM, BLOCK_ROWS);
+
+    unsigned int grid_size_x = (static_cast<unsigned int>(shape.cols) + TILE_DIM - 1u) / TILE_DIM;
+    unsigned int grid_size_y = (static_cast<unsigned int>(shape.rows) + TILE_DIM - 1u) / TILE_DIM;
+
+    dim3 grid_size{grid_size_x, grid_size_y};
+
+    host_ptr matT_host(cuda_malloc_host<float>(shape.num_elem()));
+
+    TransposeResult result = bench_transpose_kernel_only(
+        config.kernel, version, "cuda_kernel", shape, block_size, grid_size, config.repeat_kernel,
+        ref,
+        [&]()
+        {
+            // Launch kernel
+            launch_transpose_tiled_padded_kernel<TILE_DIM, BLOCK_ROWS>(
+                mat_dev, matT_dev, static_cast<size_t>(shape.rows), static_cast<size_t>(shape.cols),
+                block_size, grid_size);
+        },
+        [&]() -> CheckResult
+        {
+            gpu::cuda_check(
+                cudaMemcpy(matT_host.get(), matT_dev, shape.bytes(), cudaMemcpyDefault));
+
+            return check_array_close(matT_host.get(), ref, shape.num_elem());
+        },
+        cuda_timer);
+
+    result.tile_dim         = TILE_DIM;
+    result.block_rows       = BLOCK_ROWS;
+    result.elems_per_thread = TILE_DIM / BLOCK_ROWS;
+
+    write_csv_row(out, result);
+
+    // GPU allocated memory is released automatically by DeviceBuffer.
+}
+
 void run_tiled_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& config, float* mat_dev,
                                 float* matT_dev, MatrixShape shape, TiledConfig tiled_config,
                                 float* ref, CudaTimer& cuda_timer, CpuTimer& cpu_timer)
@@ -489,16 +534,22 @@ void run_tiled_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
         {
             run_tiled_kernel_benchmark_helper<8u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
                                                       cuda_timer, cpu_timer);
+            run_tiled_padded_kernel_benchmark_helper<8u, 8u>(out, config, mat_dev, matT_dev, shape,
+                                                             ref, cuda_timer, cpu_timer);
         }
         else if (tile_dim == 16)
         {
             run_tiled_kernel_benchmark_helper<16u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
                                                        cuda_timer, cpu_timer);
+            run_tiled_padded_kernel_benchmark_helper<16u, 8u>(out, config, mat_dev, matT_dev, shape,
+                                                              ref, cuda_timer, cpu_timer);
         }
         else if (tile_dim == 32)
         {
             run_tiled_kernel_benchmark_helper<32u, 8u>(out, config, mat_dev, matT_dev, shape, ref,
                                                        cuda_timer, cpu_timer);
+            run_tiled_padded_kernel_benchmark_helper<32u, 8u>(out, config, mat_dev, matT_dev, shape,
+                                                              ref, cuda_timer, cpu_timer);
         }
         else
         {
@@ -513,11 +564,15 @@ void run_tiled_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
         {
             run_tiled_kernel_benchmark_helper<16u, 16u>(out, config, mat_dev, matT_dev, shape, ref,
                                                         cuda_timer, cpu_timer);
+            run_tiled_padded_kernel_benchmark_helper<16u, 16u>(out, config, mat_dev, matT_dev,
+                                                               shape, ref, cuda_timer, cpu_timer);
         }
         else if (tile_dim == 32)
         {
             run_tiled_kernel_benchmark_helper<32u, 16u>(out, config, mat_dev, matT_dev, shape, ref,
                                                         cuda_timer, cpu_timer);
+            run_tiled_padded_kernel_benchmark_helper<32u, 16u>(out, config, mat_dev, matT_dev,
+                                                               shape, ref, cuda_timer, cpu_timer);
         }
         else
         {
@@ -530,6 +585,8 @@ void run_tiled_kernel_benchmark(std::ofstream& out, const BenchmarkConfig& confi
     {
         run_tiled_kernel_benchmark_helper<32u, 32u>(out, config, mat_dev, matT_dev, shape, ref,
                                                     cuda_timer, cpu_timer);
+        run_tiled_padded_kernel_benchmark_helper<32u, 32u>(out, config, mat_dev, matT_dev, shape,
+                                                           ref, cuda_timer, cpu_timer);
     }
     else
     {
