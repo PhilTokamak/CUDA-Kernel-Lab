@@ -12,19 +12,19 @@
 
 void copy_cpu_baseline(const float* A, float* B, size_t n)
 {
-    for (size_t i = 0; i < n; ++i)
-    {
-        B[i] = A[i];
-    }
+    std::copy(A, A + n, B);
 }
 
-__global__ void copy_cuda_baseline(const float* A, float* B, size_t n)
+void copy_cuda_baseline(const float* A, float* B, size_t n)
 {
-    size_t idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < n)
-    {
-        B[idx] = A[idx];
-    }
+    // size_t idx    = threadIdx.x + blockIdx.x * blockDim.x;
+    // size_t stride = blockDim.x * gridDim.x;
+
+    // for (size_t i = idx; i < n; i += stride)
+    // {
+    //     B[i] = A[i];
+    // }
+    gpu::cuda_check(cudaMemcpy(B, A, n * sizeof(float), cudaMemcpyDeviceToDevice));
 }
 
 struct MatrixShape
@@ -377,18 +377,9 @@ TransposeResult bench_transpose_d2h(const std::string& kernel, const std::string
 TransposeResult bench_cuda_copy_baseline(const float* mat_dev, float* mat_copy_dev,
                                          MatrixShape shape, int repeat, CudaTimer& cuda_timer)
 {
-    dim3 block_size{256};
-    dim3 grid_size_copy_baseline{
-        static_cast<unsigned int>((shape.num_elem() + block_size.x - 1) / block_size.x)};
-
     TransposeResult r = bench_transpose_kernel_only(
-        "tranpose", "cuda_copy", "copy_baseline", shape, block_size, grid_size_copy_baseline,
-        repeat, nullptr,
-        [&]()
-        {
-            copy_cuda_baseline<<<grid_size_copy_baseline, block_size>>>(mat_dev, mat_copy_dev,
-                                                                        shape.num_elem());
-        },
+        "tranpose", "cuda_copy", "copy_baseline", shape, dim3{0, 0, 0}, dim3{0, 0, 0}, repeat,
+        nullptr, [&]() { copy_cuda_baseline(mat_dev, mat_copy_dev, shape.num_elem()); },
         [&]() -> CheckResult { return CheckResult{}; }, cuda_timer);
 
     r.bytes   = shape.bytes() * 2;
