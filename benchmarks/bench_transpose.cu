@@ -85,7 +85,7 @@ struct TiledConfig
 
 struct TransposeResult
 {
-    std::string kernel{}; // kernel name, e.g. `reduction`
+    std::string kernel{}; // kernel name, e.g. `transpose`
     std::string
         version{}; // implementation version, e.g. `cpu_serial`, `cuda_atomicAdd`, `pinned memcpy`
     std::string mode{};  // measure mode / execution stage, e.g. `cpu`, `cuda_kernel`, `h2d`, `d2h`
@@ -249,7 +249,7 @@ void write_csv_row(std::ofstream& out, const TransposeResult& r)
                r.max_abs_error, r.max_rel_error, (r.correct ? "true" : "false"));
 }
 
-TransposeResult bench_reduction_cpu_serial(const float* mat_host, float* matT_host,
+TransposeResult bench_transpose_cpu_serial(const float* mat_host, float* matT_host,
                                            MatrixShape shape, int repeat, CpuTimer& cpu_timer)
 {
     TransposeResult r = make_transpose_result("transpose", "cpu_serial", "cpu", FP32_DTYPE, shape,
@@ -284,7 +284,7 @@ TransposeResult bench_cpu_copy_baseline(const float* mat_host, float* mat_copy_h
     return r;
 }
 
-TransposeResult bench_reduction_cpu_omp(const float* mat_host, float* matT_host, MatrixShape shape,
+TransposeResult bench_transpose_cpu_omp(const float* mat_host, float* matT_host, MatrixShape shape,
                                         int repeat, const float* ref, CpuTimer& cpu_timer)
 {
     TransposeResult r = make_transpose_result("transpose", "cpu_omp", "cpu", FP32_DTYPE, shape,
@@ -378,7 +378,7 @@ TransposeResult bench_cuda_copy_baseline(const float* mat_dev, float* mat_copy_d
                                          MatrixShape shape, int repeat, CudaTimer& cuda_timer)
 {
     TransposeResult r = bench_transpose_kernel_only(
-        "tranpose", "cuda_copy", "copy_baseline", shape, dim3{0, 0, 0}, dim3{0, 0, 0}, repeat,
+        "transpose", "cuda_copy", "copy_baseline", shape, dim3{0, 0, 0}, dim3{0, 0, 0}, repeat,
         nullptr, [&]() { copy_cuda_baseline(mat_dev, mat_copy_dev, shape.num_elem()); },
         [&]() -> CheckResult { return CheckResult{}; }, cuda_timer);
 
@@ -630,7 +630,7 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     write_csv_row(out, result_cpu_copy_baseline);
 
     // CPU serial benchmark
-    TransposeResult result_cpu_serial = bench_reduction_cpu_serial(
+    TransposeResult result_cpu_serial = bench_transpose_cpu_serial(
         mat_host.get(), matT_host.get(), shape, config.repeat_cpu, cpu_timer);
 
     write_csv_row(out, result_cpu_serial);
@@ -641,7 +641,7 @@ void run_single_size_benchmark(std::ofstream& out, const BenchmarkConfig& config
     auto check = check_array_close(matT_host.get(), ref.get(), n);
 
     // CPU OMP benchmark
-    TransposeResult result_cpu_omp = bench_reduction_cpu_omp(
+    TransposeResult result_cpu_omp = bench_transpose_cpu_omp(
         mat_host.get(), matT_host.get(), shape, config.repeat_cpu, ref.get(), cpu_timer);
 
     write_csv_row(out, result_cpu_omp);
